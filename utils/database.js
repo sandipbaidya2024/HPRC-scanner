@@ -1,0 +1,115 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
+
+// ✅ সব STORAGE_KEYS এক জায়গায়
+const STORAGE_KEYS = {
+  STUDENTS_LIST: '@students_list',
+  PROFILE_KEY: '@teacher_profile',
+  APP_VERSION: '@app_version',
+};
+
+// ==================== STUDENT FUNCTIONS ====================
+
+// ১. সমস্ত স্টুডেন্ট একসাথে আনা
+export const getStudents = async () => {
+  try {
+    const data = await AsyncStorage.getItem(STORAGE_KEYS.STUDENTS_LIST);
+    return data ? JSON.parse(data) : [];
+  } catch (error) {
+    console.error('Error loading students:', error);
+    return [];
+  }
+};
+
+// ২. স্টুডেন্ট সেভ বা আপডেট করা
+export const saveStudentData = async (studentData) => {
+  try {
+    const allStudents = await getStudents();
+    const existingIndex = allStudents.findIndex(s => s.id === studentData.id);
+    
+    if (existingIndex !== -1) {
+      allStudents[existingIndex] = { ...studentData, savedAt: new Date().toISOString() };
+    } else {
+      allStudents.push({ ...studentData, id: Date.now(), savedAt: new Date().toISOString() });
+    }
+    
+    await AsyncStorage.setItem(STORAGE_KEYS.STUDENTS_LIST, JSON.stringify(allStudents));
+    return true;
+  } catch (error) {
+    console.error('Error saving student:', error);
+    return false;
+  }
+};
+
+// ৩. স্টুডেন্ট ডিলিট করা
+export const deleteStudent = async (id) => {
+  try {
+    const allStudents = await getStudents();
+    const filtered = allStudents.filter(s => s.id !== parseInt(id));
+    await AsyncStorage.setItem(STORAGE_KEYS.STUDENTS_LIST, JSON.stringify(filtered));
+    return true;
+  } catch (error) {
+    console.error('Error deleting student:', error);
+    return false;
+  }
+};
+
+// ৪. নির্দিষ্ট ক্লাসের স্টুডেন্ট খোঁজা
+export const getStudentsByClass = async (className) => {
+  try {
+    const allStudents = await getStudents();
+    return allStudents.filter(student => student.class === className);
+  } catch (error) {
+    console.error('Error loading students by class:', error);
+    return [];
+  }
+};
+
+// ৫. ক্লাস এবং রোল নম্বর দিয়ে নির্দিষ্ট স্টুডেন্ট খোঁজা
+export const getStudentByRoll = async (className, rollNumber) => {
+  const classStudents = await getStudentsByClass(className);
+  return classStudents.find(s => String(s.roll) === String(rollNumber));
+};
+
+// ==================== PROFILE FUNCTIONS ====================
+
+// প্রোফাইল সেভ করার জন্য
+export const saveProfile = async (profileData) => {
+  try {
+    await AsyncStorage.setItem(STORAGE_KEYS.PROFILE_KEY, JSON.stringify(profileData));
+    return true;
+  } catch (error) {
+    console.error("Error saving profile", error);
+    return false;
+  }
+};
+
+// প্রোফাইল রিড করার জন্য
+export const getProfile = async () => {
+  try {
+    const data = await AsyncStorage.getItem(STORAGE_KEYS.PROFILE_KEY);
+    return data ? JSON.parse(data) : null;
+  } catch (error) {
+    return null;
+  }
+};
+
+// ==================== VERSION FUNCTIONS ====================
+
+// Get saved app version
+export const getAppVersion = async () => {
+  try {
+    return await AsyncStorage.getItem(STORAGE_KEYS.APP_VERSION);
+  } catch (error) {
+    return null;
+  }
+};
+
+// Save current app version
+export const setAppVersion = async (version) => {
+  try {
+    await AsyncStorage.setItem(STORAGE_KEYS.APP_VERSION, version);
+    return true;
+  } catch (error) {
+    return false;
+  }
+};
