@@ -1,15 +1,19 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useMemo, useState } from 'react';
-import { ActivityIndicator, Alert, Image, Modal, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, TouchableWithoutFeedback, View } from 'react-native';
+import { useEffect, useMemo, useState } from 'react';
+import { ActivityIndicator, Alert, BackHandler, Image, Modal, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, TouchableWithoutFeedback, View } from 'react-native';
 
-import { saveStudentData } from '../utils/database';
+import { getStudents, saveStudentData } from '../utils/database';
 import { BCO_FIELDS, CLASS_OPTIONS, FORMATIVE_COLUMNS, LPCD_FIELDS, SUMMATIVE_COLUMNS } from '../utils/reportCard';
+
+console.log("🔥🔥🔥 editData.js LOADED - TEST LOG 🔥🔥🔥");
 
 export default function EditData() {
   const { data, imageUri } = useLocalSearchParams();
   const router = useRouter();
   
   const [imagePreviewVisible, setImagePreviewVisible] = useState(false);
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
   
   const parsedStudents = useMemo(() => {
     try {
@@ -21,9 +25,40 @@ export default function EditData() {
 
   const [students, setStudents] = useState(parsedStudents);
   const [tab, setTab] = useState('formative');
-  const [isSaving, setIsSaving] = useState(false);
   
   const student = students[0] || {};
+  const originalStudent = parsedStudents[0] || {};
+
+  // ডাটা পরিবর্তন হয়েছে কিনা চেক করা
+  useEffect(() => {
+    const hasChanges = JSON.stringify(student) !== JSON.stringify(originalStudent);
+    setHasUnsavedChanges(hasChanges);
+  }, [student, originalStudent]);
+
+  // ব্যাক বাটন হ্যান্ডলার
+  useEffect(() => {
+    const backAction = () => {
+      if (hasUnsavedChanges) {
+        Alert.alert(
+          "অসংরক্ষিত পরিবর্তন!",
+          "আপনার করা পরিবর্তনগুলি এখনও সংরক্ষণ করা হয়নি। আপনি কি সত্যিই পেছনে যেতে চান?",
+          [
+            { text: "থাকুন", style: "cancel" },
+            { 
+              text: "ছেড়ে যান", 
+              style: "destructive",
+              onPress: () => router.back()
+            }
+          ]
+        );
+        return true;
+      }
+      return false;
+    };
+
+    const backHandler = BackHandler.addEventListener('hardwareBackPress', backAction);
+    return () => backHandler.remove();
+  }, [hasUnsavedChanges]);
 
   const subjects = ['1st Language', '2nd Language', 'Mathematics', 'Our Environment', 'Art & Work Education', 'Health & Physical Education'];
 
@@ -54,43 +89,92 @@ export default function EditData() {
     }, 0);
   };
 
-const handleSave = async () => {
+  const handleSave = async () => {
+    console.log("🚨🚨🚨 HANDLE SAVE BUTTON PRESSED! 🚨🚨🚨");
+    
+    if (!student.roll || !student.class) {
+      Alert.alert("তথ্য নেই", "দয়া করে রোল নম্বর এবং ক্লাস সেট করুন।");
+      return;
+    }
+
     setIsSaving(true);
     
-    // database.js এর নতুন লজিক অনুযায়ী আইডি এবং সময় যোগ করা হচ্ছে
-    const studentToSave = {
-      ...student,
-      id: student.id || Date.now(), // যদি নতুন স্টুডেন্ট হয় তবে নতুন আইডি তৈরি হবে
-      savedAt: new Date().toISOString(),
-    };
-
-    const success = await saveStudentData(studentToSave);
-    setIsSaving(false);
-    
-    if (success) {
-      Alert.alert(
-        "সফল", 
-        "ছাত্রের তথ্য সঠিকভাবে সেভ করা হয়েছে!",
-        [
-          { 
-            text: "হোমে যান", 
-            onPress: () => router.replace('/'),
-            style: "default"
-          },
-          { 
-            text: "নতুন স্ক্যান", 
-            onPress: () => router.push('/scan'),
-            style: "default"
-          }
-        ]
+    try {
+      const allStudents = await getStudents();
+      const existingStudent = allStudents.find(s => 
+        String(s.roll) === String(student.roll) && s.class === student.class
       );
-    } else {
-      Alert.alert("ত্রুটি", "ডেটা সেভ করা সম্ভব হয়নি। দয়া করে আবার চেষ্টা করুন।");
+      
+      const studentToSave = {
+        id: existingStudent?.id || Date.now(),
+        name: student.name || '',
+        class: student.class,
+        roll: student.roll,
+        section: student.section || '',
+        subjects: student.subjects || [],
+        formative: student.formative || {},
+        summative: student.summative || {},
+        lpcd: student.lpcd || {},
+        bco: student.bco || {},
+        imageUri: imageUri || '',
+        savedAt: new Date().toISOString()
+      };
+
+      const success = await saveStudentData(studentToSave);
+      setIsSaving(false);
+      
+      if (success) {
+        setHasUnsavedChanges(false);
+        
+        // ✅ সুন্দর সফলতার Popup
+        Alert.alert(
+          "🎉 অভিনন্দন!",
+          `ছাত্র "${student.name}" এর তথ্য সফলভাবে সংরক্ষণ করা হয়েছে!\n\n` +
+          `📋 রোল: ${student.roll}\n` +
+          `📚 ক্লাস: ${student.class}\n` +
+          `📝 সেকশন: ${student.section || 'N/A'}\n\n` +
+          `📊 ফরমেটিভ মার্কস: ${Object.keys(student.formative || {}).length} টি বিষয়\n` +
+          `🧠 LPCD: ${Object.keys(student.lpcd || {}).length} টি ফিল্ড\n` +
+          `🎯 BCO: ${Object.keys(student.bco || {}).length} টি ফিল্ড`,
+          [
+            { 
+              text: "ঠিক আছে", 
+              onPress: () => {
+                // Popup বন্ধ হবে, edit screen এ থাকবে
+              }
+            }
+          ]
+        );
+      } else {
+        Alert.alert("ত্রুটি", "ডেটা সেভ করা সম্ভব হয়নি।");
+      }
+    } catch (error) {
+      console.error("❌ Save error:", error);
+      setIsSaving(false);
+      Alert.alert("ত্রুটি", "সেভ করার সময় সমস্যা হয়েছে: " + error.message);
     }
   };
 
   const handleScanAnother = () => {
-    router.push('/scan');
+    if (hasUnsavedChanges) {
+      Alert.alert(
+        "অসংরক্ষিত পরিবর্তন!",
+        "আপনার করা পরিবর্তনগুলি এখনও সংরক্ষণ করা হয়নি। নতুন স্ক্যান করতে গেলে ডাটা হারাবে। আপনি কি নিশ্চিত?",
+        [
+          { text: "থাকুন", style: "cancel" },
+          { 
+            text: "নতুন স্ক্যান", 
+            style: "destructive",
+            onPress: () => {
+              // index.js এর DocumentScanner কে কল করা
+              router.replace('/');
+            }
+          }
+        ]
+      );
+    } else {
+      router.replace('/');
+    }
   };
 
   // Render Student Info with EDITABLE Class and Section
@@ -471,7 +555,6 @@ const styles = StyleSheet.create({
   },
   btnText: { color: '#fff', fontWeight: 'bold', fontSize: 16 },
   
-  // Modal Styles
   modalContainer: {
     flex: 1,
     backgroundColor: 'rgba(0, 0, 0, 0.95)',

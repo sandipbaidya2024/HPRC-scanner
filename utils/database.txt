@@ -33,41 +33,17 @@ export const checkStudentExists = async (roll, className) => {
 };
 
 // ৩. স্টুডেন্ট সেভ বা আপডেট করা
-// ৩. স্টুডেন্ট সেভ বা আপডেট করা
 export const saveStudentData = async (studentData) => {
   try {
     const allStudents = await getStudents();
     const existingIndex = allStudents.findIndex(s => s.id === studentData.id);
     
-    // ✅ নিশ্চিত করুন সব ডাটা সেভ হচ্ছে
-    const studentToSave = {
-      id: studentData.id || Date.now(),
-      name: studentData.name || '',
-      class: studentData.class || '',
-      roll: studentData.roll || '',
-      section: studentData.section || '',
-      subjects: studentData.subjects || [],
-      // ✅ মার্কস ডাটা সঠিকভাবে সেভ হচ্ছে কিনা
-      marks: studentData.marks || {},
-      formative: studentData.formative || {},
-      summative: studentData.summative || {},
-      lpcd: studentData.lpcd || {},
-      bco: studentData.bco || {},
-      imageUri: studentData.imageUri || '',
-      savedAt: new Date().toISOString()
-    };
-    
-    console.log('💾 Saving student data:', {
-      name: studentToSave.name,
-      roll: studentToSave.roll,
-      hasFormative: Object.keys(studentToSave.formative).length > 0,
-      formativeKeys: Object.keys(studentToSave.formative)
-    });
-    
     if (existingIndex !== -1) {
-      allStudents[existingIndex] = studentToSave;
+      // যদি আগে থেকেই থাকে, তাহলে আপডেট করো
+      allStudents[existingIndex] = { ...studentData, savedAt: new Date().toISOString() };
     } else {
-      allStudents.push(studentToSave);
+      // নতুন স্টুডেন্ট হলে লিস্টে যোগ করো
+      allStudents.push({ ...studentData, id: Date.now(), savedAt: new Date().toISOString() });
     }
     
     await AsyncStorage.setItem(STORAGE_KEYS.STUDENTS_LIST, JSON.stringify(allStudents));
@@ -77,6 +53,7 @@ export const saveStudentData = async (studentData) => {
     return false;
   }
 };
+
 // ৪. স্টুডেন্ট ডিলিট করা
 export const deleteStudent = async (id) => {
   try {
@@ -91,27 +68,16 @@ export const deleteStudent = async (id) => {
 };
 
 // ৫. নির্দিষ্ট ক্লাসের স্টুডেন্ট খোঁজা
-// ৫. নির্দিষ্ট ক্লাসের স্টুডেন্ট খোঁজা
 export const getStudentsByClass = async (className) => {
   try {
     const allStudents = await getStudents();
-    const filtered = allStudents.filter(student => student.class === className);
-    
-    console.log(`📚 Found ${filtered.length} students for class ${className}`);
-    filtered.forEach(s => {
-      const hasMarks = s.formative && Object.keys(s.formative).length > 0;
-      console.log(`   Roll ${s.roll}: ${s.name} - ${hasMarks ? '✅ has marks' : '❌ no marks'}`);
-      if (hasMarks) {
-        console.log(`      Marks sample:`, JSON.stringify(s.formative).substring(0, 100));
-      }
-    });
-    
-    return filtered;
+    return allStudents.filter(student => student.class === className);
   } catch (error) {
     console.error('Error loading students by class:', error);
     return [];
   }
 };
+
 // ৬. ক্লাস এবং রোল নম্বর দিয়ে নির্দিষ্ট স্টুডেন্ট খোঁজা
 export const getStudentByRoll = async (className, rollNumber) => {
   const classStudents = await getStudentsByClass(className);

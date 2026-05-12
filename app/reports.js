@@ -1,15 +1,34 @@
 import { LinearGradient } from 'expo-linear-gradient';
-import { useRouter } from 'expo-router';
+import * as Print from 'expo-print';
+import { useLocalSearchParams, useRouter } from 'expo-router';
+import * as Sharing from 'expo-sharing';
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, FlatList, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, Modal, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { WebView } from 'react-native-webview';
 import { getStudentsByClass } from '../utils/database';
 import { CLASS_OPTIONS } from '../utils/reportCard';
 
 export default function Reports() {
+  const { type } = useLocalSearchParams();
+  const router = useRouter();
   const [selectedClass, setSelectedClass] = useState('IV');
+  const [selectedStudent, setSelectedStudent] = useState(null);
   const [students, setStudents] = useState([]);
   const [loading, setLoading] = useState(false);
-  const router = useRouter();
+  const [generating, setGenerating] = useState(false);
+  const [reportType, setReportType] = useState(type || 'academic');
+  const [shareMode, setShareMode] = useState('class');
+  const [showPreview, setShowPreview] = useState(false);
+  const [previewHtml, setPreviewHtml] = useState('');
+
+  const reportTypes = {
+    academic: { title: 'Academic Report', icon: '📊', color: '#4CAF50' },
+    lpcd: { title: 'LPCD Report', icon: '🧠', color: '#00BCD4' },
+    bco: { title: 'BCO Report', icon: '🎯', color: '#3F51B5' },
+    dpls: { title: 'DPLS Report', icon: '🌟', color: '#9C27B0' },
+  };
+
+  const currentReport = reportTypes[reportType] || reportTypes.academic;
 
   useEffect(() => {
     loadClassStudents();
@@ -22,100 +41,473 @@ export default function Reports() {
     setLoading(false);
   };
 
-  // CSV Export (without expo-print)
-  const exportToCSV = () => {
-    if (students.length === 0) {
-      Alert.alert('No Data', 'No students found in this class');
-      return;
-    }
+  const handleStudentSelect = (student) => {
+    setSelectedStudent(student);
+    setShareMode('individual');
+  };
 
-    let csv = 'Name,Roll,Section,Subject,F1A,F1B,F1C,F2A,F2B,F2C,F3A,F3B,F3C,SE1,SE2,SE3\n';
-    
-    students.forEach(student => {
+  // PDF HTML Generators
+  const generateAcademicHTML = async (studentsData) => {
+    let html = `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <style>
+          body { font-family: 'Helvetica', sans-serif; padding: 20px; background: white; }
+          .header { text-align: center; border-bottom: 2px solid #4CAF50; padding-bottom: 10px; margin-bottom: 20px; }
+          .school-name { color: #4CAF50; font-size: 24px; font-weight: bold; }
+          .report-title { font-size: 18px; margin: 10px 0; }
+          .date { font-size: 12px; color: #666; margin-bottom: 20px; }
+          table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+          th, td { border: 1px solid #ccc; padding: 8px; text-align: center; font-size: 10px; }
+          th { background-color: #e8f5e9; color: #4CAF50; font-weight: bold; }
+          .student-header { background: #e8f5e9; padding: 10px; margin-top: 20px; margin-bottom: 10px; border-radius: 5px; }
+          .footer { margin-top: 40px; text-align: center; font-size: 11px; color: #666; }
+        </style>
+      </head>
+      <body>
+        <div class="header">
+          <p class="school-name">Bagu Junior Basic School</p>
+          <p class="report-title">Academic Progress Report</p>
+          <p class="date">Generated on: ${new Date().toLocaleDateString()} | Class: ${selectedClass}</p>
+        </div>
+    `;
+
+    const studentsArray = Array.isArray(studentsData) ? studentsData : [studentsData];
+
+    studentsArray.forEach(student => {
+      html += `
+        <div class="student-header">
+          <h3>${student.name} (Roll: ${student.roll} | Section: ${student.section || 'A'})</h3>
+        </div>
+        <table>
+          <thead>
+            <tr>
+              <th>Subject</th>
+              <th>F1A</th><th>F1B</th><th>F1C</th>
+              <th>F2A</th><th>F2B</th><th>F2C</th>
+              <th>F3A</th><th>F3B</th><th>F3C</th>
+              <th>SE1</th><th>SE2</th><th>SE3</th>
+            </tr>
+          </thead>
+          <tbody>
+      `;
+      
       Object.keys(student.formative || {}).forEach(subject => {
         const fMarks = student.formative[subject] || {};
         const sMarks = student.summative[subject] || {};
-        csv += `${student.name},${student.roll},${student.section},${subject},`;
-        csv += `${fMarks.F1A || ''},${fMarks.F1B || ''},${fMarks.F1C || ''},`;
-        csv += `${fMarks.F2A || ''},${fMarks.F2B || ''},${fMarks.F2C || ''},`;
-        csv += `${fMarks.F3A || ''},${fMarks.F3B || ''},${fMarks.F3C || ''},`;
-        csv += `${sMarks.SE1 || ''},${sMarks.SE2 || ''},${sMarks.SE3 || ''}\n`;
+        html += `
+          <tr>
+            <td><strong>${subject}</strong></td>
+            <td>${fMarks.F1A || '-'}</td><td>${fMarks.F1B || '-'}</td><td>${fMarks.F1C || '-'}</td>
+            <td>${fMarks.F2A || '-'}</td><td>${fMarks.F2B || '-'}</td><td>${fMarks.F2C || '-'}</td>
+            <td>${fMarks.F3A || '-'}</td><td>${fMarks.F3B || '-'}</td><td>${fMarks.F3C || '-'}</td>
+            <td>${sMarks.SE1 || '-'}</td><td>${sMarks.SE2 || '-'}</td><td>${sMarks.SE3 || '-'}</td>
+          </tr>
+        `;
       });
+      
+      html += `</tbody></table>`;
     });
 
-    Alert.alert('CSV Ready', 'CSV file is ready. You can share it.', [
-      { text: 'OK' }
-    ]);
-    console.log('CSV Data:', csv.substring(0, 500));
+    html += `<div class="footer"><p>Generated by Banglar Shiksha Assistant</p></div></body></html>`;
+    return html;
+  };
+
+  const generateLPCDHTML = async (studentsData) => {
+    let html = `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <style>
+          body { font-family: 'Helvetica', sans-serif; padding: 20px; }
+          .header { text-align: center; border-bottom: 2px solid #00BCD4; padding-bottom: 10px; margin-bottom: 20px; }
+          .school-name { color: #00BCD4; font-size: 24px; font-weight: bold; }
+          .report-title { font-size: 18px; margin: 10px 0; }
+          table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+          th, td { border: 1px solid #ccc; padding: 8px; text-align: left; font-size: 11px; }
+          th { background-color: #e0f7fa; color: #00BCD4; }
+          .student-header { background: #e0f7fa; padding: 10px; margin-top: 20px; border-radius: 5px; }
+        </style>
+      </head>
+      <body>
+        <div class="header">
+          <p class="school-name">Bagu Junior Basic School</p>
+          <p class="report-title">LPCD Assessment Report</p>
+          <p>Generated on: ${new Date().toLocaleDateString()} | Class: ${selectedClass}</p>
+        </div>
+    `;
+
+    const studentsArray = Array.isArray(studentsData) ? studentsData : [studentsData];
+
+    studentsArray.forEach(student => {
+      const lpcd = student.lpcd || {};
+      html += `
+        <div class="student-header"><h3>${student.name} (Roll: ${student.roll})</h3></div>
+        <table>
+          <thead><tr><th>Domain</th><th>1st Phase</th><th>2nd Phase</th><th>3rd Phase</th></tr></thead>
+          <tbody>
+            <tr><td>Pattern of intelligence</td><td>${lpcd['Pattern of intelligence']?.formative1 || '-'}</td><td>${lpcd['Pattern of intelligence']?.formative2 || '-'}</td><td>${lpcd['Pattern of intelligence']?.formative3 || '-'}</td></tr>
+            <tr><td>Area of interest</td><td>${lpcd['Area of interest']?.formative1 || '-'}</td><td>${lpcd['Area of interest']?.formative2 || '-'}</td><td>${lpcd['Area of interest']?.formative3 || '-'}</td></tr>
+            <tr><td>Positive attitude</td><td>${lpcd['Positive attitude']?.formative1 || '-'}</td><td>${lpcd['Positive attitude']?.formative2 || '-'}</td><td>${lpcd['Positive attitude']?.formative3 || '-'}</td></tr>
+            <tr><td>Exceptional ability</td><td>${lpcd['Exceptional ability']?.formative1 || '-'}</td><td>${lpcd['Exceptional ability']?.formative2 || '-'}</td><td>${lpcd['Exceptional ability']?.formative3 || '-'}</td></tr>
+            <tr><td>Features of anxiety</td><td>${lpcd['Features of anxiety']?.formative1 || '-'}</td><td>${lpcd['Features of anxiety']?.formative2 || '-'}</td><td>${lpcd['Features of anxiety']?.formative3 || '-'}</td></tr>
+            <tr><td>Learning gaps</td><td>${lpcd['Learning gaps']?.formative1 || '-'}</td><td>${lpcd['Learning gaps']?.formative2 || '-'}</td><td>${lpcd['Learning gaps']?.formative3 || '-'}</td></tr>
+            <tr><td>Specific learning difficulties</td><td>${lpcd['Specific learning difficulties']?.formative1 || '-'}</td><td>${lpcd['Specific learning difficulties']?.formative2 || '-'}</td><td>${lpcd['Specific learning difficulties']?.formative3 || '-'}</td></tr>
+          </tbody>
+        </table>
+      `;
+    });
+    html += `</body></html>`;
+    return html;
+  };
+
+  const generateBCOHTML = async (studentsData) => {
+    let html = `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <style>
+          body { font-family: 'Helvetica', sans-serif; padding: 20px; }
+          .header { text-align: center; border-bottom: 2px solid #3F51B5; padding-bottom: 10px; margin-bottom: 20px; }
+          .school-name { color: #3F51B5; font-size: 24px; font-weight: bold; }
+          .report-title { font-size: 18px; margin: 10px 0; }
+          table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+          th, td { border: 1px solid #ccc; padding: 8px; text-align: left; font-size: 11px; }
+          th { background-color: #e8eaf6; color: #3F51B5; }
+          .student-header { background: #e8eaf6; padding: 10px; margin-top: 20px; border-radius: 5px; }
+        </style>
+      </head>
+      <body>
+        <div class="header">
+          <p class="school-name">Bagu Junior Basic School</p>
+          <p class="report-title">BCO Assessment Report</p>
+          <p>Generated on: ${new Date().toLocaleDateString()} | Class: ${selectedClass}</p>
+        </div>
+    `;
+
+    const studentsArray = Array.isArray(studentsData) ? studentsData : [studentsData];
+
+    studentsArray.forEach(student => {
+      const bco = student.bco || {};
+      html += `
+        <div class="student-header"><h3>${student.name} (Roll: ${student.roll})</h3></div>
+        <table>
+          <thead><tr><th>Domain</th><th>1st Phase</th><th>2nd Phase</th><th>3rd Phase</th></tr></thead>
+          <tbody>
+            <tr><td>Self awareness</td><td>${bco['Self awareness']?.formative1 || '-'}</td><td>${bco['Self awareness']?.formative2 || '-'}</td><td>${bco['Self awareness']?.formative3 || '-'}</td></tr>
+            <tr><td>Communication skill</td><td>${bco['Communication skill']?.formative1 || '-'}</td><td>${bco['Communication skill']?.formative2 || '-'}</td><td>${bco['Communication skill']?.formative3 || '-'}</td></tr>
+            <tr><td>Critical thinking</td><td>${bco['Critical thinking']?.formative1 || '-'}</td><td>${bco['Critical thinking']?.formative2 || '-'}</td><td>${bco['Critical thinking']?.formative3 || '-'}</td></tr>
+            <tr><td>Problem solving ability</td><td>${bco['Problem solving ability']?.formative1 || '-'}</td><td>${bco['Problem solving ability']?.formative2 || '-'}</td><td>${bco['Problem solving ability']?.formative3 || '-'}</td></tr>
+            <tr><td>Decision making skills</td><td>${bco['Decision making skills']?.formative1 || '-'}</td><td>${bco['Decision making skills']?.formative2 || '-'}</td><td>${bco['Decision making skills']?.formative3 || '-'}</td></tr>
+          </tbody>
+        </table>
+      `;
+    });
+    html += `</body></html>`;
+    return html;
+  };
+
+  const generateDPLSHTML = async () => {
+    return `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <style>
+          body { font-family: 'Helvetica', sans-serif; padding: 20px; }
+          .header { text-align: center; border-bottom: 2px solid #9C27B0; padding-bottom: 10px; margin-bottom: 20px; }
+          .school-name { color: #9C27B0; font-size: 24px; font-weight: bold; }
+          .coming-soon { text-align: center; padding: 50px; color: #666; font-size: 16px; }
+        </style>
+      </head>
+      <body>
+        <div class="header">
+          <p class="school-name">Bagu Junior Basic School</p>
+          <p class="report-title">DPLS Report</p>
+        </div>
+        <div class="coming-soon">
+          <h2>🚀 Coming Soon!</h2>
+          <p>DPLS Report will be available in the next update.</p>
+        </div>
+      </body>
+      </html>
+    `;
+  };
+
+  const handlePreview = async () => {
+    if (students.length === 0) {
+      Alert.alert('No Data', `No students found in Class ${selectedClass}`);
+      return;
+    }
+
+    setGenerating(true);
+
+    let htmlContent = '';
+    let studentsToExport = students;
+
+    if (shareMode === 'individual' && selectedStudent) {
+      studentsToExport = [selectedStudent];
+    }
+
+    switch (reportType) {
+      case 'academic':
+        htmlContent = await generateAcademicHTML(studentsToExport);
+        break;
+      case 'lpcd':
+        htmlContent = await generateLPCDHTML(studentsToExport);
+        break;
+      case 'bco':
+        htmlContent = await generateBCOHTML(studentsToExport);
+        break;
+      default:
+        htmlContent = await generateDPLSHTML();
+    }
+
+    setPreviewHtml(htmlContent);
+    setShowPreview(true);
+    setGenerating(false);
+  };
+
+  const handleGeneratePDF = async () => {
+    if (students.length === 0) {
+      Alert.alert('No Data', `No students found in Class ${selectedClass}`);
+      return;
+    }
+
+    setGenerating(true);
+
+    let htmlContent = '';
+    let studentsToExport = students;
+
+    if (shareMode === 'individual' && selectedStudent) {
+      studentsToExport = [selectedStudent];
+    }
+
+    switch (reportType) {
+      case 'academic':
+        htmlContent = await generateAcademicHTML(studentsToExport);
+        break;
+      case 'lpcd':
+        htmlContent = await generateLPCDHTML(studentsToExport);
+        break;
+      case 'bco':
+        htmlContent = await generateBCOHTML(studentsToExport);
+        break;
+      default:
+        htmlContent = await generateDPLSHTML();
+    }
+
+    try {
+      const { uri } = await Print.printToFileAsync({ html: htmlContent });
+      await Sharing.shareAsync(uri);
+    } catch (error) {
+      Alert.alert('Error', 'Failed to generate PDF');
+    } finally {
+      setGenerating(false);
+    }
   };
 
   return (
     <View style={styles.container}>
       <LinearGradient colors={['#1a73e8', '#0d47a1']} style={styles.header}>
-        <Text style={styles.headerTitle}>📊 Student Reports</Text>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.filterBar}>
-          {CLASS_OPTIONS.map(cls => (
-            <TouchableOpacity 
-              key={cls} 
-              style={[styles.chip, selectedClass === cls && styles.activeChip]}
-              onPress={() => setSelectedClass(cls)}
-            >
-              <Text style={[styles.chipText, selectedClass === cls && styles.activeChipText]}>Class {cls}</Text>
-            </TouchableOpacity>
-          ))}
-        </ScrollView>
+        <Text style={styles.headerTitle}>{currentReport.icon} {currentReport.title}</Text>
+        <Text style={styles.headerSubtitle}>Preview & Generate PDF report</Text>
       </LinearGradient>
 
-      {loading ? (
-        <ActivityIndicator size="large" color="#1a73e8" style={styles.loader} />
-      ) : (
-        <FlatList
-          data={students}
-          keyExtractor={(item) => item.id?.toString() || Math.random().toString()}
-          renderItem={({ item }) => (
-            <TouchableOpacity style={styles.studentCard}>
-              <View style={styles.avatar}>
-                <Text style={styles.avatarText}>{item.name?.charAt(0) || '?'}</Text>
-              </View>
-              <View style={styles.info}>
-                <Text style={styles.name}>{item.name}</Text>
-                <Text style={styles.meta}>Roll: {item.roll} | Class: {item.class}</Text>
-              </View>
-            </TouchableOpacity>
-          )}
-          contentContainerStyle={styles.list}
-          ListEmptyComponent={<Text style={styles.empty}>No students found in Class {selectedClass}</Text>}
-        />
-      )}
+      <ScrollView style={styles.content}>
+        {/* Class Selection */}
+        <View style={styles.section}>
+          <Text style={styles.label}>Select Class</Text>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+            <View style={styles.classContainer}>
+              {CLASS_OPTIONS.map(cls => (
+                <TouchableOpacity
+                  key={cls}
+                  style={[styles.classChip, selectedClass === cls && styles.classChipActive]}
+                  onPress={() => setSelectedClass(cls)}
+                >
+                  <Text style={[styles.classText, selectedClass === cls && styles.classTextActive]}>Class {cls}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </ScrollView>
+        </View>
 
-      {/* Export Button */}
-      {students.length > 0 && (
-        <TouchableOpacity style={styles.exportBtn} onPress={exportToCSV}>
-          <Text style={styles.exportBtnText}>📥 Export to CSV</Text>
-        </TouchableOpacity>
-      )}
+        {/* Share Mode Selection */}
+        <View style={styles.section}>
+          <Text style={styles.label}>Share Mode</Text>
+          <View style={styles.modeContainer}>
+            <TouchableOpacity
+              style={[styles.modeChip, shareMode === 'class' && styles.modeChipActive, { borderColor: currentReport.color }]}
+              onPress={() => setShareMode('class')}
+            >
+              <Text style={[styles.modeText, shareMode === 'class' && { color: currentReport.color }]}>📚 Full Class Report</Text>
+              <Text style={styles.modeDesc}>All students in one PDF</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.modeChip, shareMode === 'individual' && styles.modeChipActive, { borderColor: currentReport.color }]}
+              onPress={() => setShareMode('individual')}
+            >
+              <Text style={[styles.modeText, shareMode === 'individual' && { color: currentReport.color }]}>👤 Individual Report</Text>
+              <Text style={styles.modeDesc}>Select a single student</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+
+        {/* Student Selection (for individual mode) */}
+        {shareMode === 'individual' && (
+          <View style={styles.section}>
+            <Text style={styles.label}>Select Student</Text>
+            <ScrollView style={styles.studentList}>
+              {students.map(student => (
+                <TouchableOpacity
+                  key={student.id}
+                  style={[styles.studentCard, selectedStudent?.id === student.id && styles.studentCardActive]}
+                  onPress={() => handleStudentSelect(student)}
+                >
+                  <View style={styles.studentAvatar}>
+                    <Text style={styles.avatarText}>{student.name?.charAt(0) || '?'}</Text>
+                  </View>
+                  <View style={styles.studentInfo}>
+                    <Text style={styles.studentName}>{student.name}</Text>
+                    <Text style={styles.studentMeta}>Roll: {student.roll} | Section: {student.section || 'A'}</Text>
+                  </View>
+                  {selectedStudent?.id === student.id && (
+                    <View style={styles.checkIcon}>
+                      <Text>✓</Text>
+                    </View>
+                  )}
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          </View>
+        )}
+
+        {/* Info Card */}
+        <View style={[styles.infoCard, { backgroundColor: `${currentReport.color}20` }]}>
+          <Text style={styles.infoText}>
+            {shareMode === 'class' 
+              ? `📚 ${students.length} students found in Class ${selectedClass}`
+              : selectedStudent 
+                ? `👤 Selected: ${selectedStudent.name} (Roll: ${selectedStudent.roll})`
+                : `👤 Please select a student from above`}
+          </Text>
+        </View>
+
+        {/* Action Buttons */}
+        <View style={styles.actionButtons}>
+          <TouchableOpacity 
+            style={[styles.previewBtn, { borderColor: currentReport.color }]}
+            onPress={handlePreview}
+            disabled={generating || loading || (shareMode === 'individual' && !selectedStudent)}
+          >
+            <Text style={[styles.previewBtnText, { color: currentReport.color }]}>👁️ Preview</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity 
+            style={[styles.generateBtn, { backgroundColor: currentReport.color }]}
+            onPress={handleGeneratePDF}
+            disabled={generating || loading || (shareMode === 'individual' && !selectedStudent)}
+          >
+            {generating ? (
+              <ActivityIndicator color="#fff" size="small" />
+            ) : (
+              <>
+                <Text style={styles.generateIcon}>📄</Text>
+                <Text style={styles.generateText}>Generate & Share</Text>
+              </>
+            )}
+          </TouchableOpacity>
+        </View>
+      </ScrollView>
+
+      {/* Preview Modal with WebView */}
+      <Modal
+        visible={showPreview}
+        animationType="slide"
+        onRequestClose={() => setShowPreview(false)}
+      >
+        <View style={styles.previewContainer}>
+          <View style={styles.previewHeader}>
+            <Text style={styles.previewTitle}>📄 Report Preview</Text>
+            <TouchableOpacity onPress={() => setShowPreview(false)} style={styles.closeBtn}>
+              <Text style={styles.closeBtnText}>✕</Text>
+            </TouchableOpacity>
+          </View>
+          <WebView
+            originWhitelist={['*']}
+            source={{ html: previewHtml }}
+            style={styles.webview}
+          />
+          <View style={styles.previewFooter}>
+            <TouchableOpacity 
+              style={[styles.shareFromPreviewBtn, { backgroundColor: currentReport.color }]}
+              onPress={() => {
+                setShowPreview(false);
+                setTimeout(handleGeneratePDF, 500);
+              }}
+            >
+              <Text style={styles.shareFromPreviewText}>📤 Generate & Share PDF</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#f8f9fa' },
+  container: { flex: 1, backgroundColor: '#f5f5f5' },
   header: { padding: 25, paddingTop: 50, borderBottomLeftRadius: 30, borderBottomRightRadius: 30 },
-  headerTitle: { fontSize: 20, fontWeight: 'bold', color: '#fff', marginBottom: 15 },
-  filterBar: { flexDirection: 'row' },
-  chip: { paddingHorizontal: 15, paddingVertical: 8, borderRadius: 20, backgroundColor: 'rgba(255,255,255,0.2)', marginRight: 10 },
-  activeChip: { backgroundColor: '#fff' },
-  chipText: { color: '#fff', fontSize: 12 },
-  activeChipText: { color: '#1a73e8', fontWeight: 'bold' },
-  loader: { marginTop: 50 },
-  list: { padding: 20, paddingBottom: 100 },
-  studentCard: { flexDirection: 'row', backgroundColor: '#fff', padding: 15, borderRadius: 15, marginBottom: 12, alignItems: 'center', elevation: 3 },
-  avatar: { width: 45, height: 45, borderRadius: 22.5, backgroundColor: '#e3f2fd', justifyContent: 'center', alignItems: 'center', marginRight: 15 },
-  avatarText: { fontSize: 18, fontWeight: 'bold', color: '#1a73e8' },
-  info: { flex: 1 },
-  name: { fontSize: 16, fontWeight: 'bold', color: '#333' },
-  meta: { fontSize: 12, color: '#777', marginTop: 3 },
-  empty: { textAlign: 'center', marginTop: 50, color: '#999' },
-  exportBtn: { position: 'absolute', bottom: 20, left: 20, right: 20, backgroundColor: '#4CAF50', padding: 15, borderRadius: 12, alignItems: 'center', elevation: 5 },
-  exportBtnText: { color: '#fff', fontSize: 16, fontWeight: 'bold' },
+  headerTitle: { fontSize: 24, fontWeight: 'bold', color: '#fff' },
+  headerSubtitle: { fontSize: 14, color: '#e0e0e0', marginTop: 5 },
+  content: { padding: 20 },
+  section: { marginBottom: 25 },
+  label: { fontSize: 16, fontWeight: 'bold', color: '#333', marginBottom: 12 },
+  classContainer: { flexDirection: 'row', flexWrap: 'wrap' },
+  classChip: { paddingHorizontal: 18, paddingVertical: 10, borderRadius: 25, backgroundColor: '#e0e0e0', marginRight: 10, marginBottom: 8 },
+  classChipActive: { backgroundColor: '#1a73e8' },
+  classText: { fontSize: 14, color: '#666' },
+  classTextActive: { color: '#fff' },
+  modeContainer: { flexDirection: 'row', gap: 12 },
+  modeChip: { flex: 1, padding: 15, borderRadius: 12, borderWidth: 2, borderColor: '#ddd', backgroundColor: '#fff', alignItems: 'center' },
+  modeChipActive: { backgroundColor: '#f5f5f5' },
+  modeText: { fontSize: 14, fontWeight: 'bold', marginBottom: 4 },
+  modeDesc: { fontSize: 10, color: '#999' },
+  studentList: { maxHeight: 300 },
+  studentCard: { flexDirection: 'row', backgroundColor: '#fff', padding: 12, borderRadius: 12, marginBottom: 8, alignItems: 'center', elevation: 2 },
+  studentCardActive: { backgroundColor: '#e3f2fd', borderWidth: 1, borderColor: '#1a73e8' },
+  studentAvatar: { width: 45, height: 45, borderRadius: 22.5, backgroundColor: '#1a73e8', justifyContent: 'center', alignItems: 'center', marginRight: 12 },
+  avatarText: { fontSize: 18, fontWeight: 'bold', color: '#fff' },
+  studentInfo: { flex: 1 },
+  studentName: { fontSize: 15, fontWeight: 'bold', color: '#333' },
+  studentMeta: { fontSize: 12, color: '#666', marginTop: 2 },
+  checkIcon: { width: 28, height: 28, borderRadius: 14, backgroundColor: '#4CAF50', justifyContent: 'center', alignItems: 'center' },
+  infoCard: { padding: 12, borderRadius: 10, marginBottom: 20 },
+  infoText: { fontSize: 14, textAlign: 'center', fontWeight: '500' },
+  actionButtons: { flexDirection: 'row', gap: 12, marginBottom: 20 },
+  previewBtn: { flex: 1, padding: 16, borderRadius: 12, alignItems: 'center', borderWidth: 2, backgroundColor: '#fff' },
+  previewBtnText: { fontSize: 16, fontWeight: 'bold' },
+  generateBtn: { flex: 1, flexDirection: 'row', padding: 16, borderRadius: 12, alignItems: 'center', justifyContent: 'center', gap: 10 },
+  generateIcon: { fontSize: 20, color: '#fff' },
+  generateText: { fontSize: 16, fontWeight: 'bold', color: '#fff' },
+  
+  // Preview Modal Styles
+  previewContainer: { flex: 1, backgroundColor: '#fff' },
+  previewHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 15, borderBottomWidth: 1, borderBottomColor: '#ddd', backgroundColor: '#f5f5f5' },
+  previewTitle: { fontSize: 18, fontWeight: 'bold', color: '#333' },
+  closeBtn: { padding: 8 },
+  closeBtnText: { fontSize: 20, fontWeight: 'bold', color: '#666' },
+  webview: { flex: 1 },
+  previewFooter: { padding: 15, borderTopWidth: 1, borderTopColor: '#ddd' },
+  shareFromPreviewBtn: { padding: 15, borderRadius: 12, alignItems: 'center' },
+  shareFromPreviewText: { color: '#fff', fontSize: 16, fontWeight: 'bold' },
 });

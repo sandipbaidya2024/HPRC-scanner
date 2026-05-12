@@ -1,0 +1,284 @@
+import * as TextRecognition from '@react-native-ml-kit/text-recognition';
+import * as FileSystem from 'expo-file-system/legacy';
+import { manipulateAsync, SaveFormat } from 'expo-image-manipulator';
+import { Alert } from 'react-native';
+
+export const FORMATIVE_COLUMNS = ['F1A', 'F1B', 'F1C', 'F2A', 'F2B', 'F2C', 'F3A', 'F3B', 'F3C'];
+export const SUMMATIVE_COLUMNS = ['SE1', 'SE2', 'SE3'];
+export const MARK_COLUMNS = [...FORMATIVE_COLUMNS, ...SUMMATIVE_COLUMNS];
+export const CLASS_OPTIONS = ['I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII', 'IX', 'X'];
+export const GRADE_OPTIONS = ['A', 'B', 'C', 'D'];
+export const PHASE_COLUMNS = [
+  { key: 'formative1', label: 'Formative 1st Phase' },
+  { key: 'formative2', label: 'Formative 2nd Phase' },
+  { key: 'formative3', label: 'Formative 3rd Phase' },
+];
+
+export const LPCD_FIELDS = ['Pattern of intelligence', 'Area of interest', 'Positive attitude', 'Exceptional ability', 'Features of anxiety', 'Learning gaps', 'Specific learning difficulties'];
+export const BCO_FIELDS = ['Self awareness', 'Communication skill', 'Collaborative thinking', 'Experiential learning skill', 'Critical thinking', 'Computational / Analytical thinking', 'Problem solving ability', 'Decision making skills', 'Creative presentation skill', 'Aesthetic appreciation'];
+
+function createMarksForClass(subjectsList) {
+  const marksObject = {};
+  subjectsList.forEach((subject) => {
+    marksObject[subject] = {};
+    MARK_COLUMNS.forEach((column) => { marksObject[subject][column] = ''; });
+  });
+  return marksObject;
+}
+
+function createLPCDSection() {
+  const lpcdObject = {};
+  LPCD_FIELDS.forEach((field) => {
+    lpcdObject[field] = {};
+    PHASE_COLUMNS.forEach((phase) => { lpcdObject[field][phase.key] = ''; });
+  });
+  return lpcdObject;
+}
+
+function createBCOSection() {
+  const bcoObject = {};
+  BCO_FIELDS.forEach((field) => {
+    bcoObject[field] = {};
+    PHASE_COLUMNS.forEach((phase) => { bcoObject[field][phase.key] = ''; });
+  });
+  return bcoObject;
+}
+
+export function createEmptyStudent(subjectsList = ['1st Language', '2nd Language', 'Mathematics', 'Our Environment', 'Art & Work Education', 'Health & Physical Education']) {
+  return { imageUri: '', ocrText: '', name: '', class: '', roll: '', section: '', subjects: subjectsList, marks: createMarksForClass(subjectsList), lpcd: createLPCDSection(), bco: createBCOSection() };
+}
+
+// 🚀 MAIN OCR FUNCTION
+export async function parseStudentFromImage(imageUri) {
+  const cleanImageUri = imageUri.split('?')[0];
+
+  try {
+    // 💡 হাতের লেখা ভালোভাবে বোঝার জন্য ছবির সাইজ 1000 থেকে বাড়িয়ে 1500 করা হলো
+    const compressedImage = await manipulateAsync(
+      cleanImageUri,
+      [{ resize: { width: 1500 } }], 
+      { compress: 0.6, format: SaveFormat.JPEG }
+    );
+
+    const base64Image = await FileSystem.readAsStringAsync(compressedImage.uri, {
+      encoding: 'base64', 
+    });
+
+    // ⚠️ আপনার কাজ করা API Key এখানে বসান
+    const API_KEY = process.env.EXPO_PUBLIC_GEMINI_API_KEY; 
+    const API_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${API_KEY}`;
+
+    // 💡 LPCD এবং BCO এর সম্পূর্ণ নকশা প্রম্পটে যোগ করা হলো
+    const requestBody = {
+      contents: [{
+        parts: [
+          { text: `Extract student details from this report card. Return ONLY a pure JSON object. 
+          Use exactly this JSON format:
+          {
+            "name": "Student Name",
+            "class": "Class Name",
+            "roll": "Roll No",
+            "section": "Section",
+            "marks": {
+              "1st Language": { "F1A": "", "F1B": "", "F1C": "", "F2A": "", "F2B": "", "F2C": "", "F3A": "", "F3B": "", "F3C": "", "SE1": "", "SE2": "", "SE3": "" },
+              "2nd Language": { "F1A": "", "F1B": "", "F1C": "", "F2A": "", "F2B": "", "F2C": "", "F3A": "", "F3B": "", "F3C": "", "SE1": "", "SE2": "", "SE3": "" },
+              "Mathematics": { "F1A": "", "F1B": "", "F1C": "", "F2A": "", "F2B": "", "F2C": "", "F3A": "", "F3B": "", "F3C": "", "SE1": "", "SE2": "", "SE3": "" },
+              "Our Environment": { "F1A": "", "F1B": "", "F1C": "", "F2A": "", "F2B": "", "F2C": "", "F3A": "", "F3B": "", "F3C": "", "SE1": "", "SE2": "", "SE3": "" },
+              "Art & Work Education": { "F1A": "", "F1B": "", "F1C": "", "F2A": "", "F2B": "", "F2C": "", "F3A": "", "F3B": "", "F3C": "", "SE1": "", "SE2": "", "SE3": "" },
+              "Health & Physical Education": { "F1A": "", "F1B": "", "F1C": "", "F2A": "", "F2B": "", "F2C": "", "F3A": "", "F3B": "", "F3C": "", "SE1": "", "SE2": "", "SE3": "" }
+            },
+            "lpcd": {
+              "Pattern of intelligence": { "formative1": "", "formative2": "", "formative3": "" },
+              "Area of interest": { "formative1": "", "formative2": "", "formative3": "" },
+              "Positive attitude": { "formative1": "", "formative2": "", "formative3": "" },
+              "Exceptional ability": { "formative1": "", "formative2": "", "formative3": "" },
+              "Features of anxiety": { "formative1": "", "formative2": "", "formative3": "" },
+              "Learning gaps": { "formative1": "", "formative2": "", "formative3": "" },
+              "Specific learning difficulties": { "formative1": "", "formative2": "", "formative3": "" }
+            },
+            "bco": {
+              "Self awareness": { "formative1": "", "formative2": "", "formative3": "" },
+              "Communication skill": { "formative1": "", "formative2": "", "formative3": "" },
+              "Collaborative thinking": { "formative1": "", "formative2": "", "formative3": "" },
+              "Experiential learning skill": { "formative1": "", "formative2": "", "formative3": "" },
+              "Critical thinking": { "formative1": "", "formative2": "", "formative3": "" },
+              "Computational / Analytical thinking": { "formative1": "", "formative2": "", "formative3": "" },
+              "Problem solving ability": { "formative1": "", "formative2": "", "formative3": "" },
+              "Decision making skills": { "formative1": "", "formative2": "", "formative3": "" },
+              "Creative presentation skill": { "formative1": "", "formative2": "", "formative3": "" },
+              "Aesthetic appreciation": { "formative1": "", "formative2": "", "formative3": "" }
+            }
+          }
+          Instructions:
+          1. Fill 'marks' with exact numbers.
+          2. For 'lpcd' (Learning Perspective of Cognitive Domain), extract the handwritten text for 1st Formative Phase (formative1), 2nd Formative Phase (formative2), and 3rd Formative Phase (formative3).
+          3. For 'bco' (Behavioural Cognitive Out comes), extract the grades (e.g., Good, Satisfactory, A, B, C) mapping F1A to formative1, F1B to formative2, and F1C to formative3.
+          4. If a box is empty, use "". Do not use markdown.` },
+          { inlineData: { mimeType: "image/jpeg", data: base64Image } }
+        ]
+      }]
+    };
+
+    const response = await fetch(API_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(requestBody),
+    });
+
+    const responseText = await response.text();
+
+    if (!response.ok) {
+        Alert.alert('Gemini API Error ' + response.status, responseText);
+        return createEmptyStudent();
+    }
+
+    const data = JSON.parse(responseText);
+
+    if (!data.candidates || data.candidates.length === 0) {
+      Alert.alert('AI Error', 'No text found in the image.');
+      return createEmptyStudent();
+    }
+
+    let rawText = data.candidates[0].content.parts[0].text;
+    
+    console.log("\n====================================");
+    console.log("🤖 GEMINI RAW RESPONSE:");
+    console.log(rawText);
+    console.log("====================================\n");
+
+    let extractedData = {};
+    try {
+        const startIndex = rawText.indexOf('{');
+        const endIndex = rawText.lastIndexOf('}');
+        if (startIndex !== -1 && endIndex !== -1) {
+            const jsonString = rawText.substring(startIndex, endIndex + 1);
+            extractedData = JSON.parse(jsonString);
+        } else {
+            extractedData = JSON.parse(rawText.replace(/```json/g, '').replace(/```/g, '').trim());
+        }
+    } catch (parseError) {
+        console.error("JSON Parse Error:", parseError);
+        Alert.alert('Data Error', 'AI returned incorrect format. Check console.');
+        return createEmptyStudent();
+    }
+
+    const defaultStudent = createEmptyStudent();
+    return {
+      ...defaultStudent,
+      imageUri: cleanImageUri,
+      name: extractedData.name || '',
+      class: extractedData.class || '',
+      roll: extractedData.roll || '',
+      section: extractedData.section || '',
+      marks: { ...defaultStudent.marks, ...extractedData.marks },
+      lpcd: { ...defaultStudent.lpcd, ...extractedData.lpcd },
+      bco: { ...defaultStudent.bco, ...extractedData.bco },
+    };
+
+  } catch (error) {
+    console.error("Fetch/App Error:", error);
+    Alert.alert('App Error', error.message);
+    return createEmptyStudent();
+  }
+}
+
+export function toEditDataStudent(student) {
+  const subjects = student.subjects || ['1st Language', '2nd Language', 'Mathematics', 'Our Environment', 'Art & Work Education', 'Health & Physical Education'];
+  const formative = {};
+  const summative = {};
+  
+  subjects.forEach((subject) => {
+    formative[subject] = {};
+    summative[subject] = {};
+    const subjectMarks = student.marks?.[subject] || {};
+    FORMATIVE_COLUMNS.forEach((column) => { formative[subject][column] = subjectMarks[column] || ''; });
+    SUMMATIVE_COLUMNS.forEach((column) => { summative[subject][column] = subjectMarks[column] || ''; });
+  });
+  
+  return { 
+      id: student.id || Date.now(), 
+      name: student.name || '', 
+      class: student.class || '', 
+      roll: student.roll || '', 
+      section: student.section || '', 
+      formative, 
+      summative, 
+      lpcd: student.lpcd || createLPCDSection(), 
+      bco: student.bco || createBCOSection() 
+  };
+}
+
+export function buildStructuredStudent(student) { 
+    return toEditDataStudent(student); 
+}
+
+export function updateStudentClass(student, className) { 
+    return { ...student, class: className }; 
+}
+// Add these functions to your existing reportCard.js
+
+// Parse Holistic Report Card (4 pages)
+// Add these functions to your existing reportCard.js
+
+// Parse Holistic Report Card (4 pages - different sections)
+export async function parseHolisticReportCard(imageUris) {
+  console.log('🔄 Parsing Holistic Report Card - 4 pages');
+  
+  let combinedData = {
+    name: '',
+    class: '',
+    roll: '',
+    section: '',
+    formative: {},
+    summative: {},
+    lpcd: {},
+    bco: {}
+  };
+
+  // Page 1: Student Info (Name, Roll, Class, Section)
+  console.log('📄 Processing Page 1: Student Info');
+  const page1Result = await parseStudentInfoFromImage(imageUris[0]);
+  combinedData.name = page1Result.name;
+  combinedData.class = page1Result.class;
+  combinedData.roll = page1Result.roll;
+  combinedData.section = page1Result.section;
+  
+  // Page 2: Formative + Summative Marks
+  console.log('📄 Processing Page 2: Formative & Summative Marks');
+  const page2Result = await parseStudentFromImage(imageUris[1]);
+  combinedData.formative = { ...combinedData.formative, ...page2Result.marks };
+  combinedData.summative = { ...combinedData.summative, ...page2Result.summative };
+  
+  // Page 3: LPCD Data
+  console.log('📄 Processing Page 3: LPCD Assessment');
+  const page3Text = await extractTextFromImage(imageUris[2]);
+  combinedData.lpcd = parseLPCDFromText(page3Text);
+  
+  // Page 4: BCO Data
+  console.log('📄 Processing Page 4: BCO Assessment');
+  const page4Text = await extractTextFromImage(imageUris[3]);
+  combinedData.bco = parseBCOFromText(page4Text);
+  
+  console.log('✅ Holistic Report Card Parsing Complete');
+  console.log('Name:', combinedData.name);
+  console.log('Formative Subjects:', Object.keys(combinedData.formative));
+  
+  return combinedData;
+}
+
+// Helper: Extract text from image using ML Kit
+async function extractTextFromImage(imageUri) {
+  try {
+    const result = await TextRecognition.recognize(imageUri);
+    return result.text;
+  } catch (error) {
+    console.error('Text extraction error:', error);
+    return '';
+  }
+}
+
+// Helper: Parse student info from first page
+async function parseStudentInfoFromImage(imageUri) {
+  const text = await extractTextFromImage(imageUri);
+  return parseStudentInfo(text);
+}
