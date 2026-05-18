@@ -2,311 +2,310 @@ import * as FileSystem from 'expo-file-system/legacy';
 import { manipulateAsync, SaveFormat } from 'expo-image-manipulator';
 import { Alert } from 'react-native';
 
+// ============= EXPORTED CONSTANTS =============
 export const FORMATIVE_COLUMNS = ['F1A', 'F1B', 'F1C', 'F2A', 'F2B', 'F2C', 'F3A', 'F3B', 'F3C'];
 export const SUMMATIVE_COLUMNS = ['SE1', 'SE2', 'SE3'];
-export const MARK_COLUMNS = [...FORMATIVE_COLUMNS, ...SUMMATIVE_COLUMNS];
 export const CLASS_OPTIONS = ['I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII', 'IX', 'X'];
-export const GRADE_OPTIONS = ['A', 'B', 'C', 'D'];
-export const PHASE_COLUMNS = [
-  { key: 'formative1', label: 'Formative 1st Phase' },
-  { key: 'formative2', label: 'Formative 2nd Phase' },
-  { key: 'formative3', label: 'Formative 3rd Phase' },
+
+export const LPCD_FIELDS = [
+  'Pattern of intelligence', 'Area of interest', 'Positive attitude',
+  'Exceptional ability', 'Features of anxiety', 'Learning gaps',
+  'Specific learning difficulties'
 ];
 
-export const LPCD_FIELDS = ['Pattern of intelligence', 'Area of interest', 'Positive attitude', 'Exceptional ability', 'Features of anxiety', 'Learning gaps', 'Specific learning difficulties'];
-export const BCO_FIELDS = ['Self awareness', 'Communication skill', 'Collaborative thinking', 'Experiential learning skill', 'Critical thinking', 'Computational / Analytical thinking', 'Problem solving ability', 'Decision making skills', 'Creative presentation skill', 'Aesthetic appreciation'];
+export const BCO_FIELDS = [
+  'Self awareness', 'Communication skill', 'Collaborative thinking',
+  'Experiential learning skill', 'Critical thinking',
+  'Computational / Analytical thinking', 'Problem solving ability',
+  'Decision making skills', 'Creative presentation skill', 'Aesthetic appreciation'
+];
 
-// ============= MULTI-KEY MANAGEMENT SYSTEM =============
-const API_KEYS = [
-  process.env.EXPO_PUBLIC_GEMINI_API_KEY_1,
-  process.env.EXPO_PUBLIC_GEMINI_API_KEY_2,
-  process.env.EXPO_PUBLIC_GEMINI_API_KEY_3,
-  process.env.EXPO_PUBLIC_GEMINI_API_KEY_4,
-  process.env.EXPO_PUBLIC_GEMINI_API_KEY_5,
-].filter(key => key && key.length > 20);
+export const DPLS_FIELDS = [
+  'Listening Skill', 'Communication', 'Empathy Skill', 'Co-operation Skill',
+  'Conversation Skill', 'Friendship Skill', 'Conflict Resolution',
+  'Stress Coping Skill', 'Decision Making', 'Leadership'
+];
 
-let currentKeyIndex = 0;
-let keyUsageCount = new Map();
+// ============= API KEY MANAGEMENT (5 Keys) =============
+// ============= API KEY MANAGEMENT (Paid API - Single Key) =============
+const API_KEY = process.env.EXPO_PUBLIC_GEMINI_API_KEY;
 
 function getNextApiKey() {
-  if (API_KEYS.length === 0) {
-    console.error("❌ No valid API Keys found!");
+  if (!API_KEY || API_KEY.length < 20) {
+    console.error("❌ No valid API Key found! Please check .env file");
     return null;
   }
-  
-  const key = API_KEYS[currentKeyIndex];
-  const count = (keyUsageCount.get(key) || 0) + 1;
-  keyUsageCount.set(key, count);
-  
-  console.log(`🔄 Using Key ${currentKeyIndex + 1}/${API_KEYS.length} (Used ${count} times today)`);
-  currentKeyIndex = (currentKeyIndex + 1) % API_KEYS.length;
-  
-  return key;
+  console.log("🔑 Using Paid API Key");
+  return API_KEY;
 }
-
-// ============= HELPER FUNCTIONS =============
-function cleanRollNumber(roll) {
-  if (!roll) return '';
-  // শুধু সংখ্যা রাখুন (০১ থেকে ১০০ ফরম্যাটে)
-  const cleaned = roll.toString().replace(/[^0-9]/g, '');
-  // ২ ডিজিটে ফরম্যাট করুন (০১, ০২, ..., ১০০)
-  if (cleaned && cleaned.length === 1) {
-    return `0${cleaned}`;
-  }
-  return cleaned;
-}
-
 function cleanClassName(className) {
   if (!className) return '';
-  // রোমান সংখ্যা বড় হাতের অক্ষরে কনভার্ট (i, ii, iii -> I, II, III)
   const romanMap = {
     'i': 'I', 'ii': 'II', 'iii': 'III', 'iv': 'IV', 'v': 'V',
-    'vi': 'VI', 'vii': 'VII', 'viii': 'VIII', 'ix': 'IX', 'x': 'X'
+    'vi': 'VI', 'vii': 'VII', 'viii': 'VIII', 'ix': 'IX', 'x': 'X',
+    '1': 'I', '2': 'II', '3': 'III', '4': 'IV', '5': 'V'
   };
   const lower = className.toLowerCase().trim();
   return romanMap[lower] || className.toUpperCase();
 }
 
-function createMarksForClass(subjectsList) {
-  const marksObject = {};
-  subjectsList.forEach((subject) => {
-    marksObject[subject] = {};
-    MARK_COLUMNS.forEach((column) => { marksObject[subject][column] = ''; });
-  });
-  return marksObject;
+function cleanRollNumber(roll) {
+  if (!roll) return '';
+  const cleaned = roll.toString().replace(/[^0-9]/g, '');
+  if (cleaned && cleaned.length === 1) return `0${cleaned}`;
+  return cleaned;
 }
 
-function createLPCDSection() {
-  const lpcdObject = {};
-  LPCD_FIELDS.forEach((field) => {
-    lpcdObject[field] = {};
-    PHASE_COLUMNS.forEach((phase) => { lpcdObject[field][phase.key] = ''; });
+// ============= CREATE EMPTY STUDENT =============
+export function createEmptyStudent() {
+  const subjects = ['1st Language', '2nd Language', 'Mathematics', 'Our Environment', 'Art & Work Education', 'Health & Physical Education'];
+  const marks = {};
+  subjects.forEach(s => {
+    marks[s] = {};
+    [...FORMATIVE_COLUMNS, ...SUMMATIVE_COLUMNS].forEach(c => marks[s][c] = '');
   });
-  return lpcdObject;
-}
 
-function createBCOSection() {
-  const bcoObject = {};
-  BCO_FIELDS.forEach((field) => {
-    bcoObject[field] = {};
-    PHASE_COLUMNS.forEach((phase) => { bcoObject[field][phase.key] = ''; });
-  });
-  return bcoObject;
-}
+  const lpcd = {};
+  LPCD_FIELDS.forEach(f => lpcd[f] = { formative1: '', formative2: '', formative3: '' });
 
-export function createEmptyStudent(subjectsList = ['1st Language', '2nd Language', 'Mathematics', 'Our Environment', 'Art & Work Education', 'Health & Physical Education']) {
-  return { 
-    imageUri: '', 
-    ocrText: '', 
-    name: '', 
-    class: '', 
-    roll: '', 
-    section: '', 
-    subjects: subjectsList, 
-    marks: createMarksForClass(subjectsList), 
-    lpcd: createLPCDSection(), 
-    bco: createBCOSection() 
+  const bco = {};
+  BCO_FIELDS.forEach(f => bco[f] = { formative1: '', formative2: '', formative3: '' });
+
+  const dpls = {};
+  DPLS_FIELDS.forEach(f => dpls[f] = { remark: '' });
+
+  return {
+    imageUri: '',
+    name: '',
+    class: '',
+    roll: '',
+    section: '',
+    marks,
+    lpcd,
+    bco,
+    dpls,
+    subjects
   };
 }
 
-// ============= MAIN OCR FUNCTION =============
-export async function parseStudentFromImage(imageUri) {
-  const cleanImageUri = imageUri.split('?')[0];
-
-  try {
-    const compressedImage = await manipulateAsync(
-      cleanImageUri,
-      [{ resize: { width: 1500 } }], 
-      { compress: 0.6, format: SaveFormat.JPEG }
-    );
-
-    const base64Image = await FileSystem.readAsStringAsync(compressedImage.uri, {
-      encoding: 'base64', 
-    });
-
-    const MODEL_NAME = "gemini-2.5-flash";
-    const API_KEY = getNextApiKey();
-    
-    if (!API_KEY) {
-      Alert.alert(
-        "⚠️ No API Key", 
-        "API key not configured. Please contact support.",
-        [{ text: "OK" }]
-      );
-      return createEmptyStudent();
-    }
-
-    const API_URL = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL_NAME}:generateContent?key=${API_KEY}`;
-
-    const requestBody = {
-      contents: [{
-        parts: [
-          { text: `Extract student details from this report card. Return ONLY a pure JSON object...` }, 
-          { inlineData: { mimeType: "image/jpeg", data: base64Image } }
-        ]
-      }]
-    };
-
-    const response = await fetch(API_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(requestBody),
-    });
-
-    const responseText = await response.text();
-
-    // ✅ 429 Rate Limit Error
-    if (response.status === 429) {
-      console.log("⚠️ Rate limit hit");
-      Alert.alert(
-        "📵 লিমিট শেষ!",
-        "আজকের বিনামূল্যে স্ক্যান লিমিট শেষ হয়ে গেছে।\n\n⏰ ১০ মিনিট পরে আবার চেষ্টা করুন।\n\n📌 টিপস: পরিষ্কার ছবি তুললে আরও ভালো রেজাল্ট পাওয়া যায়।",
-        [{ text: "বুঝলাম" }]
-      );
-      return createEmptyStudent();
-    }
-
-    // ✅ 403 Forbidden (API Key issue)
-    if (response.status === 403) {
-      Alert.alert(
-        "🔑 API সংযোগ সমস্যা",
-        "সার্ভারের সাথে যোগাযোগ করতে পারছি না।\n\nএকটু পরে আবার চেষ্টা করুন।",
-        [{ text: "ঠিক আছে" }]
-      );
-      return createEmptyStudent();
-    }
-
-    // ✅ 500+ Server Error
-    if (response.status >= 500) {
-      Alert.alert(
-        "🔄 সার্ভার সমস্যা",
-        "সার্ভার এখন ব্যস্ত। দয়া করে ২-৩ মিনিট পরে আবার চেষ্টা করুন।",
-        [{ text: "ঠিক আছে" }]
-      );
-      return createEmptyStudent();
-    }
-
-    // ✅ Other HTTP Errors
-    if (!response.ok) {
-      Alert.alert(
-        "❌ স্ক্যান ব্যর্থ",
-        `ছবিটি সঠিকভাবে পড়া যায়নি। (Error: ${response.status})\n\n📌 দয়া করে:\n• ভালো আলোতে ছবি তুলুন\n• ছবি পরিষ্কার রাখুন\n• আবার চেষ্টা করুন`,
-        [{ text: "ঠিক আছে" }]
-      );
-      return createEmptyStudent();
-    }
-
-    const data = JSON.parse(responseText);
-
-    if (!data.candidates || data.candidates.length === 0) {
-      Alert.alert(
-        "🔍 কিছু পাওয়া যায়নি",
-        "এই ছবি থেকে কোনো তথ্য বের করা সম্ভব হয়নি।\n\n📌 দয়া করে:\n• ছবিটি ভালো করে তুলুন\n• রিপোর্ট কার্ডটি সোজা রাখুন\n• আবার চেষ্টা করুন",
-        [{ text: "ঠিক আছে" }]
-      );
-      return createEmptyStudent();
-    }
-
-    let rawText = data.candidates[0].content.parts[0].text;
-    
-    console.log("\n====================================");
-    console.log("🤖 GEMINI RAW RESPONSE:");
-    console.log(rawText);
-    console.log("====================================\n");
-
-    let extractedData = {};
-    try {
-        const startIndex = rawText.indexOf('{');
-        const endIndex = rawText.lastIndexOf('}');
-        if (startIndex !== -1 && endIndex !== -1) {
-            const jsonString = rawText.substring(startIndex, endIndex + 1);
-            extractedData = JSON.parse(jsonString);
-        } else {
-            extractedData = JSON.parse(rawText.replace(/```json/g, '').replace(/```/g, '').trim());
-        }
-        
-        if (extractedData.roll) {
-            extractedData.roll = cleanRollNumber(extractedData.roll);
-        }
-        
-        if (extractedData.class) {
-            extractedData.class = cleanClassName(extractedData.class);
-        }
-        
-    } catch (parseError) {
-        console.error("JSON Parse Error:", parseError);
-        Alert.alert(
-          "⚠️ ডাটা ফরম্যাট সমস্যা",
-          "ছবি থেকে তথ্য বের করা গেলেও ফরম্যাট ঠিক নেই।\n\nদয়া করে ম্যানুয়ালি তথ্য দিন।",
-          [{ text: "ঠিক আছে" }]
-        );
-        return createEmptyStudent();
-    }
-
-    const defaultStudent = createEmptyStudent();
-    return {
-      ...defaultStudent,
-      imageUri: cleanImageUri,
-      name: extractedData.name || '',
-      class: extractedData.class || '',
-      roll: extractedData.roll || '',
-      section: extractedData.section || '',
-      marks: { ...defaultStudent.marks, ...extractedData.marks },
-      lpcd: { ...defaultStudent.lpcd, ...extractedData.lpcd },
-      bco: { ...defaultStudent.bco, ...extractedData.bco },
-    };
-
-  } catch (error) {
-    console.error("Fetch/App Error:", error);
-    
-    // ✅ Network Error
-    if (error.message === 'Network request failed') {
-      Alert.alert(
-        "📡 নেটওয়ার্ক সমস্যা",
-        "ইন্টারনেট সংযোগ চেক করুন এবং আবার চেষ্টা করুন।",
-        [{ text: "ঠিক আছে" }]
-      );
-    } else {
-      Alert.alert(
-        "⚠️ অজানা ত্রুটি",
-        `কিছু একটা সমস্যা হয়েছে। দয়া করে আবার চেষ্টা করুন।\n\n${error.message}`,
-        [{ text: "ঠিক আছে" }]
-      );
-    }
-    return createEmptyStudent();
-  }
-}
-
+// ============= CONVERT TO EDIT DATA FORMAT =============
 export function toEditDataStudent(student) {
   const subjects = student.subjects || ['1st Language', '2nd Language', 'Mathematics', 'Our Environment', 'Art & Work Education', 'Health & Physical Education'];
   const formative = {};
   const summative = {};
-  
+
   subjects.forEach((subject) => {
     formative[subject] = {};
     summative[subject] = {};
-    const subjectMarks = student.marks?.[subject] || {};
-    FORMATIVE_COLUMNS.forEach((column) => { formative[subject][column] = subjectMarks[column] || ''; });
-    SUMMATIVE_COLUMNS.forEach((column) => { summative[subject][column] = subjectMarks[column] || ''; });
+    const sm = student.marks?.[subject] || {};
+
+    FORMATIVE_COLUMNS.forEach((col) => {
+      const val = sm[col];
+      formative[subject][col] = (val === null || val === undefined) ? '' : String(val);
+    });
+    SUMMATIVE_COLUMNS.forEach((col) => {
+      const val = sm[col];
+      summative[subject][col] = (val === null || val === undefined) ? '' : String(val);
+    });
   });
-  
-  return { 
-      id: student.id || Date.now(), 
-      name: student.name || '', 
-      class: student.class || '', 
-      roll: student.roll || '', 
-      section: student.section || '', 
-      formative, 
-      summative, 
-      lpcd: student.lpcd || createLPCDSection(), 
-      bco: student.bco || createBCOSection() 
+
+  const lpcd = {};
+  LPCD_FIELDS.forEach(field => {
+    const raw = student.lpcd?.[field] || {};
+    lpcd[field] = {
+      formative1: raw.formative1 || raw.F1 || '',
+      formative2: raw.formative2 || raw.F2 || '',
+      formative3: raw.formative3 || raw.F3 || ''
+    };
+  });
+
+  const bco = {};
+  BCO_FIELDS.forEach(field => {
+    const raw = student.bco?.[field] || {};
+    bco[field] = {
+      formative1: raw.formative1 || raw.F1 || '',
+      formative2: raw.formative2 || raw.F2 || '',
+      formative3: raw.formative3 || raw.F3 || ''
+    };
+  });
+
+  const dpls = {};
+  DPLS_FIELDS.forEach(field => {
+    const raw = student.dpls?.[field] || {};
+    dpls[field] = { remark: raw.remark || raw || '' };
+  });
+
+  return {
+    id: student.id || Date.now(),
+    name: student.name || '',
+    class: student.class || '',
+    roll: student.roll || '',
+    section: student.section || '',
+    formative,
+    summative,
+    lpcd,
+    bco,
+    dpls,
+    subjects
   };
 }
 
-export function buildStructuredStudent(student) { 
-    return toEditDataStudent(student); 
+// ============= MAIN OCR FUNCTION =============
+export async function parseStudentFromImage(imageUri, base64Image = null) {
+  try {
+    console.log("🚀 Starting OCR parse...");
+    
+    let finalBase64 = base64Image;
+    
+    if (!finalBase64) {
+      const cleanUri = imageUri.split('?')[0];
+      const fileUri = cleanUri.startsWith('file://') ? cleanUri : 'file://' + cleanUri;
+      
+      const fileInfo = await FileSystem.getInfoAsync(fileUri);
+      console.log(`📊 Original Size: ${(fileInfo.size / 1024).toFixed(0)} KB`);
+      
+      const optimized = await manipulateAsync(
+        fileUri,
+        [{ resize: { width: 1000 } }],
+        { compress: 0.5, format: SaveFormat.JPEG }
+      );
+      
+      finalBase64 = await FileSystem.readAsStringAsync(optimized.uri, {
+        encoding: 'base64',
+      });
+    }
+    
+    if (!finalBase64 || finalBase64.length < 100) {
+      Alert.alert("Error", "No valid image data received");
+      return createEmptyStudent();
+    }
+
+    const API_KEY = getNextApiKey();
+    if (!API_KEY) {
+      Alert.alert("Error", "API Key not found");
+      return createEmptyStudent();
+    }
+
+    const MODEL_NAME = "gemini-2.5-flash";
+    const URL = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL_NAME}:generateContent?key=${API_KEY}`;
+
+    // Improved prompt with explicit instructions
+    const prompt = `You are an OCR system for Banglar Shiksha report cards. Extract data from this image.
+
+**CRITICAL RULES:**
+1. Class MUST be Roman numeral: I, II, III, IV, V (NOT 1,2,3,4,5)
+2. Roll number: 2-digit format (01, 02, 15 - NOT 1,2,15)
+3. ALL 6 subjects must have marks extracted
+4. "Health & Physical Education" marks are IMPORTANT - do not skip
+5. SE1 marks are summative evaluation marks
+
+**Return ONLY this JSON format (no markdown, no explanation):**
+{
+  "name": "full name from card",
+  "class": "I or II or III or IV or V",
+  "roll": "01 or 02 or 15",
+  "section": "A or B or C or D",
+  "marks": {
+    "1st Language": {"F1A":"", "F1B":"", "F1C":"", "F2A":"", "F2B":"", "F2C":"", "F3A":"", "F3B":"", "F3C":"", "SE1":"", "SE2":"", "SE3":""},
+    "2nd Language": {"F1A":"", "F1B":"", "F1C":"", "F2A":"", "F2B":"", "F2C":"", "F3A":"", "F3B":"", "F3C":"", "SE1":"", "SE2":"", "SE3":""},
+    "Mathematics": {"F1A":"", "F1B":"", "F1C":"", "F2A":"", "F2B":"", "F2C":"", "F3A":"", "F3B":"", "F3C":"", "SE1":"", "SE2":"", "SE3":""},
+    "Our Environment": {"F1A":"", "F1B":"", "F1C":"", "F2A":"", "F2B":"", "F2C":"", "F3A":"", "F3B":"", "F3C":"", "SE1":"", "SE2":"", "SE3":""},
+    "Art & Work Education": {"F1A":"", "F1B":"", "F1C":"", "F2A":"", "F2B":"", "F2C":"", "F3A":"", "F3B":"", "F3C":"", "SE1":"", "SE2":"", "SE3":""},
+    "Health & Physical Education": {"F1A":"", "F1B":"", "F1C":"", "F2A":"", "F2B":"", "F2C":"", "F3A":"", "F3B":"", "F3C":"", "SE1":"", "SE2":"", "SE3":""}
+  },
+  "lpcd": {},
+  "bco": {},
+  "dpls": {}
 }
 
-export function updateStudentClass(student, className) { 
-    return { ...student, class: className }; 
+**REMEMBER:** 
+- Class: convert "1" to "I", "2" to "II", "3" to "III", "4" to "IV", "5" to "V"
+- If "Our Environmental" appears, rename to "Our Environment"
+- Extract ALL visible marks, especially SE1 for all subjects
+- Return ONLY valid JSON`;
+
+    let response = await fetch(URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        contents: [{
+          parts: [
+            { text: prompt },
+            { inlineData: { mimeType: "image/jpeg", data: finalBase64 } }
+          ]
+        }]
+      })
+    });
+
+    const responseText = await response.text();
+    console.log("📡 Response status:", response.status);
+
+    if (response.status === 429) {
+      Alert.alert("Limit Exceeded", "API limit reached. Please try again later.");
+      return createEmptyStudent();
+    }
+    
+    if (response.status === 503) {
+      Alert.alert("Server Busy", "Server is busy. Please try again in a few seconds.");
+      return createEmptyStudent();
+    }
+
+    if (!response.ok) {
+      Alert.alert("API Error", `Status: ${response.status}`);
+      return createEmptyStudent();
+    }
+
+    const resJson = JSON.parse(responseText);
+    let rawText = resJson.candidates?.[0]?.content?.parts?.[0]?.text || '{}';
+    console.log("📝 Response received");
+
+    let extractedData = {};
+    try {
+      let cleanText = rawText.replace(/```json/g, '').replace(/```/g, '').trim();
+      const jsonMatch = cleanText.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+        extractedData = JSON.parse(jsonMatch[0]);
+        console.log("✅ JSON Parsed Successfully");
+        console.log("📚 Class:", extractedData.class);
+        console.log("📝 Name:", extractedData.name);
+      }
+    } catch (parseError) {
+      console.log("❌ JSON Parse Error:", parseError.message);
+      extractedData = {};
+    }
+
+    // Fix "Our Environment" spelling
+    if (extractedData.marks) {
+      if (extractedData.marks["Our Environmental"] && !extractedData.marks["Our Environment"]) {
+        extractedData.marks["Our Environment"] = extractedData.marks["Our Environmental"];
+        delete extractedData.marks["Our Environmental"];
+      }
+    }
+
+    const defaultStudent = createEmptyStudent();
+
+    // Ensure class is properly formatted
+    let finalClass = extractedData.class || '';
+    if (finalClass && !finalClass.match(/^[IVXLCDM]+$/i)) {
+      const classMap = { '1': 'I', '2': 'II', '3': 'III', '4': 'IV', '5': 'V' };
+      finalClass = classMap[finalClass] || finalClass;
+    }
+
+    return {
+      ...defaultStudent,
+      name: extractedData.name || '',
+      class: cleanClassName(finalClass),
+      roll: cleanRollNumber(extractedData.roll || ''),
+      section: extractedData.section || '',
+      marks: { ...defaultStudent.marks, ...(extractedData.marks || {}) },
+      lpcd: extractedData.lpcd || {},
+      bco: extractedData.bco || {},
+      dpls: extractedData.dpls || {},
+    };
+
+  } catch (error) {
+    console.log("❌ OCR Error:", error.message);
+    Alert.alert("Error", "Failed to process image: " + error.message);
+    return createEmptyStudent();
+  }
 }

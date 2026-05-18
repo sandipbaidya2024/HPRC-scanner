@@ -214,33 +214,58 @@ export default function Reports() {
     return html;
   };
 
-  const generateDPLSHTML = async () => {
-    return `
-      <!DOCTYPE html>
-      <html>
-      <head>
-        <meta charset="UTF-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <style>
-          body { font-family: 'Helvetica', sans-serif; padding: 20px; }
-          .header { text-align: center; border-bottom: 2px solid #9C27B0; padding-bottom: 10px; margin-bottom: 20px; }
-          .school-name { color: #9C27B0; font-size: 24px; font-weight: bold; }
-          .coming-soon { text-align: center; padding: 50px; color: #666; font-size: 16px; }
-        </style>
-      </head>
-      <body>
-        <div class="header">
-          <p class="school-name">Bagu Junior Basic School</p>
-          <p class="report-title">DPLS Report</p>
-        </div>
-        <div class="coming-soon">
-          <h2>🚀 Coming Soon!</h2>
-          <p>DPLS Report will be available in the next update.</p>
-        </div>
-      </body>
-      </html>
+ const generateDPLSHTML = async (studentsData) => {
+  let html = `
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <meta charset="UTF-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <style>
+        body { font-family: 'Helvetica', sans-serif; padding: 20px; }
+        .header { text-align: center; border-bottom: 2px solid #9C27B0; padding-bottom: 10px; margin-bottom: 20px; }
+        .school-name { color: #9C27B0; font-size: 24px; font-weight: bold; }
+        .report-title { font-size: 18px; margin: 10px 0; }
+        table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+        th, td { border: 1px solid #ccc; padding: 8px; text-align: left; font-size: 11px; }
+        th { background-color: #f3e5f5; color: #9C27B0; }
+        .student-header { background: #f3e5f5; padding: 10px; margin-top: 20px; border-radius: 5px; }
+      </style>
+    </head>
+    <body>
+      <div class="header">
+        <p class="school-name">Bagu Junior Basic School</p>
+        <p class="report-title">DPLS Assessment Report</p>
+        <p>Generated on: ${new Date().toLocaleDateString()} | Class: ${selectedClass}</p>
+      </div>
+  `;
+
+  const studentsArray = Array.isArray(studentsData) ? studentsData : [studentsData];
+
+  studentsArray.forEach(student => {
+    const dpls = student.dpls || {};
+    html += `
+      <div class="student-header"><h3>${student.name} (Roll: ${student.roll})</h3></div>
+      <table>
+        <thead><tr><th>Skill Domain</th><th>Remark</th></tr></thead>
+        <tbody>
     `;
-  };
+    
+    Object.keys(dpls).forEach(skill => {
+      html += `
+        <tr>
+          <td><strong>${skill}</strong></td>
+          <td>${dpls[skill]?.remark || '-'}</td>
+        </tr>
+      `;
+    });
+    
+    html += `</tbody></table>`;
+  });
+  
+  html += `</body></html>`;
+  return html;
+};
 
   const handlePreview = async () => {
     if (students.length === 0) {

@@ -1,4 +1,5 @@
 import { FontAwesome5, MaterialCommunityIcons } from '@expo/vector-icons';
+
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
@@ -23,7 +24,7 @@ const NEW_FEATURES = [
   { icon: '📊', title: 'Enhanced Reports', description: 'Generate LPCD, BCO reports in PDF format.' },
 ];
 
-export default function HomeScreen() {
+export default function HomeScreen() { 
   const router = useRouter();
   const { isDark } = useTheme();
   const colors = getColors(isDark);
@@ -49,26 +50,42 @@ export default function HomeScreen() {
     if (savedVersion !== CURRENT_VERSION) setShowUpdateModal(true);
   };
 
+
   const loadStats = async () => {
     const allStudents = await getStudents();
     const uniqueClasses = new Set(allStudents.map(s => s.class)).size;
     setStats({ total: allStudents.length, classes: uniqueClasses, scans: allStudents.filter(s => s.savedAt).length });
   };
 
-  const processScannedImage = async (imageUri) => {
-    setIsProcessing(true);
-    try {
-      const parsedStudent = await parseStudentFromImage(imageUri);
-      const nextStudent = toEditDataStudent(parsedStudent);
-      setIsProcessing(false);
-      router.push({ pathname: '/editData', params: { imageUri: imageUri, data: JSON.stringify([nextStudent]) } });
-    } catch (error) {
-      setIsProcessing(false);
-      Alert.alert('Error', 'Failed to extract data from image');
-      router.push({ pathname: '/editData', params: { imageUri: imageUri, data: JSON.stringify([toEditDataStudent(createEmptyStudent())]) } });
-    }
-  };
+ // processScannedImage ফাংশনটি Replace করুন:
 
+const processScannedImage = async (imageUri, base64Data) => {
+  console.log("📸 Processing scanned image...");
+  setIsProcessing(true);
+  try {
+    const parsedStudent = await parseStudentFromImage(imageUri, base64Data);
+    console.log("✅ Parsed Student:", JSON.stringify(parsedStudent, null, 2));
+    const nextStudent = toEditDataStudent(parsedStudent);
+    setIsProcessing(false);
+    router.push({ 
+      pathname: '/editData', 
+      params: { 
+        imageUri: imageUri, 
+        data: JSON.stringify([nextStudent]) 
+      } 
+    });
+  } catch (error) {
+    setIsProcessing(false);
+    Alert.alert('Error', 'Failed to extract data from image: ' + error.message);
+    router.push({ 
+      pathname: '/editData', 
+      params: { 
+        imageUri: imageUri, 
+        data: JSON.stringify([toEditDataStudent(createEmptyStudent())]) 
+      } 
+    });
+  }
+};
   const openScanDocument = () => setScannerVisible(true);
   const showComingSoon = () => Alert.alert('Coming Soon!', 'Holistic Report Card Scanner is under development.\n\nStay tuned!', [{ text: 'OK' }]);
   const handleUpdateModalClose = async () => { setShowUpdateModal(false); await setAppVersion(CURRENT_VERSION); };

@@ -23,7 +23,7 @@ export const getStudents = async () => {
 export const checkStudentExists = async (roll, className) => {
   try {
     const allStudents = await getStudents();
-    return allStudents.some(student => 
+    return allStudents.some(student =>
       String(student.roll) === String(roll) && student.class === className
     );
   } catch (error) {
@@ -38,7 +38,7 @@ export const saveStudentData = async (studentData) => {
   try {
     const allStudents = await getStudents();
     const existingIndex = allStudents.findIndex(s => s.id === studentData.id);
-    
+
     // ✅ নিশ্চিত করুন সব ডাটা সেভ হচ্ছে
     const studentToSave = {
       id: studentData.id || Date.now(),
@@ -53,23 +53,24 @@ export const saveStudentData = async (studentData) => {
       summative: studentData.summative || {},
       lpcd: studentData.lpcd || {},
       bco: studentData.bco || {},
+      dpls: studentData.dpls || {},
       imageUri: studentData.imageUri || '',
       savedAt: new Date().toISOString()
     };
-    
+
     console.log('💾 Saving student data:', {
       name: studentToSave.name,
       roll: studentToSave.roll,
       hasFormative: Object.keys(studentToSave.formative).length > 0,
       formativeKeys: Object.keys(studentToSave.formative)
     });
-    
+
     if (existingIndex !== -1) {
       allStudents[existingIndex] = studentToSave;
     } else {
       allStudents.push(studentToSave);
     }
-    
+
     await AsyncStorage.setItem(STORAGE_KEYS.STUDENTS_LIST, JSON.stringify(allStudents));
     return true;
   } catch (error) {
@@ -96,7 +97,7 @@ export const getStudentsByClass = async (className) => {
   try {
     const allStudents = await getStudents();
     const filtered = allStudents.filter(student => student.class === className);
-    
+
     console.log(`📚 Found ${filtered.length} students for class ${className}`);
     filtered.forEach(s => {
       const hasMarks = s.formative && Object.keys(s.formative).length > 0;
@@ -105,7 +106,7 @@ export const getStudentsByClass = async (className) => {
         console.log(`      Marks sample:`, JSON.stringify(s.formative).substring(0, 100));
       }
     });
-    
+
     return filtered;
   } catch (error) {
     console.error('Error loading students by class:', error);
@@ -118,7 +119,6 @@ export const getStudentByRoll = async (className, rollNumber) => {
   return classStudents.find(s => String(s.roll) === String(rollNumber));
 };
 
-// ==================== PROFILE FUNCTIONS ====================
 
 // প্রোফাইল সেভ করার জন্য
 export const saveProfile = async (profileData) => {

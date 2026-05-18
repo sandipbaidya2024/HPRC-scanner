@@ -3,6 +3,7 @@ import {
   ScannerModeOptions,
   launchDocumentScannerAsync,
 } from '@infinitered/react-native-mlkit-document-scanner';
+import * as FileSystem from 'expo-file-system/legacy';
 import { useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
@@ -42,12 +43,9 @@ export default function DocumentScanner({ visible, onClose, onScanComplete, init
       setLaunching(true);
 
       try {
-        // 🔥 MLKit লাইব্রেরি galleryImportAllowed true থাকলেই Gallery বাটন দেখায়
-        // কিন্তু সরাসরি gallery mode এ খোলার API নেই
-        // তাই আমরা galleryImportAllowed: true রেখে দিচ্ছি
         const options = {
           pageLimit: 1,
-          galleryImportAllowed: true,  // Gallery বাটন দেখাবে
+          galleryImportAllowed: true,
           scannerMode: ScannerModeOptions.FULL,
           resultFormats: ResultFormatOptions.JPEG,
         };
@@ -55,14 +53,25 @@ export default function DocumentScanner({ visible, onClose, onScanComplete, init
         const result = await launchDocumentScannerAsync(options);
 
         if (!result.canceled && result.pages?.[0]) {
-          onScanComplete(result.pages[0]);
+          const imageUri = result.pages[0];
+          
+          let base64Data = null;
+          try {
+            console.log("🔄 Converting to base64...");
+            // ✅ সরাসরি 'base64' স্ট্রিং ব্যবহার করুন
+            base64Data = await FileSystem.readAsStringAsync(imageUri, {
+              encoding: 'base64',
+            });
+            console.log("✅ Base64 done, length:", base64Data?.length);
+          } catch (err) {
+            console.log("❌ Base64 error:", err.message);
+          }
+          
+          onScanComplete(imageUri, base64Data);
         }
       } catch (error) {
-        console.error('Document scanner error:', error);
-        Alert.alert(
-          'Scanner unavailable',
-          'Native document scanner could not be opened. Build a fresh Android/iOS dev client after installing native modules.'
-        );
+        console.error('Scanner error:', error);
+        Alert.alert('Error', 'Scanner could not open. Please try again.');
       } finally {
         setLaunching(false);
         onClose();
@@ -78,12 +87,10 @@ export default function DocumentScanner({ visible, onClose, onScanComplete, init
         <View style={styles.card}>
           <ActivityIndicator size="large" color="#1a73e8" />
           <Text style={styles.title}>
-            {launching ? 'Opening document scanner...' : 'Preparing scanner...'}
+            {launching ? 'Opening scanner...' : 'Preparing...'}
           </Text>
           <Text style={styles.subtitle}>
-            {initialMode === 'gallery' 
-              ? 'Opening gallery... You can select a document from your gallery.' 
-              : 'Auto edge detection, crop, perspective correction, and cleanup are handled natively.'}
+            Auto edge detection, crop, and perspective correction
           </Text>
           <TouchableOpacity style={styles.cancelButton} onPress={onClose}>
             <Text style={styles.cancelText}>Cancel</Text>

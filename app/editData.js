@@ -3,18 +3,18 @@ import { useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Alert, BackHandler, Image, Modal, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, TouchableWithoutFeedback, View } from 'react-native';
 
 import { getStudents, saveStudentData } from '../utils/database';
-import { BCO_FIELDS, CLASS_OPTIONS, FORMATIVE_COLUMNS, LPCD_FIELDS, SUMMATIVE_COLUMNS } from '../utils/reportCard';
+import { BCO_FIELDS, CLASS_OPTIONS, DPLS_FIELDS, FORMATIVE_COLUMNS, LPCD_FIELDS, SUMMATIVE_COLUMNS } from '../utils/reportCard';
 
 console.log("🔥🔥🔥 editData.js LOADED - TEST LOG 🔥🔥🔥");
 
 export default function EditData() {
   const { data, imageUri } = useLocalSearchParams();
   const router = useRouter();
-  
+
   const [imagePreviewVisible, setImagePreviewVisible] = useState(false);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
-  
+
   const parsedStudents = useMemo(() => {
     try {
       return data ? JSON.parse(data) : [{}];
@@ -25,9 +25,24 @@ export default function EditData() {
 
   const [students, setStudents] = useState(parsedStudents);
   const [tab, setTab] = useState('formative');
-  
+
   const student = students[0] || {};
   const originalStudent = parsedStudents[0] || {};
+
+  // সব subjects এর লিস্ট
+  const allSubjects = ['1st Language', '2nd Language', 'Mathematics', 'Our Environment', 'Art & Work Education', 'Health & Physical Education'];
+
+  // Class অনুযায়ী subjects ফিল্টার করার ফাংশন
+  const getFilteredSubjects = (className) => {
+    // Class I, II তে Our Environment থাকে না
+    if (className === 'I' || className === 'II') {
+      return allSubjects.filter(s => s !== 'Our Environment');
+    }
+    return allSubjects;
+  };
+
+  // current class অনুযায়ী filtered subjects
+  const filteredSubjects = getFilteredSubjects(student.class);
 
   // ডাটা পরিবর্তন হয়েছে কিনা চেক করা
   useEffect(() => {
@@ -44,8 +59,8 @@ export default function EditData() {
           "আপনার করা পরিবর্তনগুলি এখনও সংরক্ষণ করা হয়নি। আপনি কি সত্যিই পেছনে যেতে চান?",
           [
             { text: "থাকুন", style: "cancel" },
-            { 
-              text: "ছেড়ে যান", 
+            {
+              text: "ছেড়ে যান",
               style: "destructive",
               onPress: () => router.back()
             }
@@ -59,8 +74,6 @@ export default function EditData() {
     const backHandler = BackHandler.addEventListener('hardwareBackPress', backAction);
     return () => backHandler.remove();
   }, [hasUnsavedChanges]);
-
-  const subjects = ['1st Language', '2nd Language', 'Mathematics', 'Our Environment', 'Art & Work Education', 'Health & Physical Education'];
 
   const updateMark = (type, subject, column, value) => {
     setStudents((current) => {
@@ -83,7 +96,7 @@ export default function EditData() {
   };
 
   const getFormativeTotal = (column) => {
-    return subjects.reduce((sum, subject) => {
+    return filteredSubjects.reduce((sum, subject) => {
       const value = parseInt(student.formative?.[subject]?.[column] || '0', 10);
       return sum + (isNaN(value) ? 0 : value);
     }, 0);
@@ -91,20 +104,20 @@ export default function EditData() {
 
   const handleSave = async () => {
     console.log("🚨🚨🚨 HANDLE SAVE BUTTON PRESSED! 🚨🚨🚨");
-    
+
     if (!student.roll || !student.class) {
       Alert.alert("তথ্য নেই", "দয়া করে রোল নম্বর এবং ক্লাস সেট করুন।");
       return;
     }
 
     setIsSaving(true);
-    
+
     try {
       const allStudents = await getStudents();
-      const existingStudent = allStudents.find(s => 
+      const existingStudent = allStudents.find(s =>
         String(s.roll) === String(student.roll) && s.class === student.class
       );
-      
+
       const studentToSave = {
         id: existingStudent?.id || Date.now(),
         name: student.name || '',
@@ -116,17 +129,17 @@ export default function EditData() {
         summative: student.summative || {},
         lpcd: student.lpcd || {},
         bco: student.bco || {},
+        dpls: student.dpls || {},
         imageUri: imageUri || '',
         savedAt: new Date().toISOString()
       };
 
       const success = await saveStudentData(studentToSave);
       setIsSaving(false);
-      
+
       if (success) {
         setHasUnsavedChanges(false);
-        
-        // ✅ সুন্দর সফলতার Popup
+
         Alert.alert(
           "🎉 অভিনন্দন!",
           `ছাত্র "${student.name}" এর তথ্য সফলভাবে সংরক্ষণ করা হয়েছে!\n\n` +
@@ -135,15 +148,9 @@ export default function EditData() {
           `📝 সেকশন: ${student.section || 'N/A'}\n\n` +
           `📊 ফরমেটিভ মার্কস: ${Object.keys(student.formative || {}).length} টি বিষয়\n` +
           `🧠 LPCD: ${Object.keys(student.lpcd || {}).length} টি ফিল্ড\n` +
-          `🎯 BCO: ${Object.keys(student.bco || {}).length} টি ফিল্ড`,
-          [
-            { 
-              text: "ঠিক আছে", 
-              onPress: () => {
-                // Popup বন্ধ হবে, edit screen এ থাকবে
-              }
-            }
-          ]
+          `🎯 BCO: ${Object.keys(student.bco || {}).length} টি ফিল্ড\n` +
+          `🌟 DPLS: ${Object.keys(student.dpls || {}).length} টি স্কিল`,
+          [{ text: "ঠিক আছে" }]
         );
       } else {
         Alert.alert("ত্রুটি", "ডেটা সেভ করা সম্ভব হয়নি।");
@@ -162,11 +169,10 @@ export default function EditData() {
         "আপনার করা পরিবর্তনগুলি এখনও সংরক্ষণ করা হয়নি। নতুন স্ক্যান করতে গেলে ডাটা হারাবে। আপনি কি নিশ্চিত?",
         [
           { text: "থাকুন", style: "cancel" },
-          { 
-            text: "নতুন স্ক্যান", 
+          {
+            text: "নতুন স্ক্যান",
             style: "destructive",
             onPress: () => {
-              // index.js এর DocumentScanner কে কল করা
               router.replace('/');
             }
           }
@@ -182,9 +188,9 @@ export default function EditData() {
     <View style={styles.infoContainer}>
       <View style={styles.infoRow}>
         <Text style={styles.infoLabel}>Name:</Text>
-        <TextInput 
-          style={styles.infoValue} 
-          value={student.name || ''} 
+        <TextInput
+          style={styles.infoValue}
+          value={student.name || ''}
           onChangeText={(text) => {
             setStudents(prev => {
               const next = [...prev];
@@ -195,12 +201,12 @@ export default function EditData() {
           placeholder="Student Name"
         />
       </View>
-      
+
       <View style={styles.infoRow}>
         <Text style={styles.infoLabel}>Roll:</Text>
-        <TextInput 
-          style={styles.infoValueSmall} 
-          value={student.roll || ''} 
+        <TextInput
+          style={styles.infoValueSmall}
+          value={student.roll || ''}
           onChangeText={(text) => {
             setStudents(prev => {
               const next = [...prev];
@@ -211,7 +217,7 @@ export default function EditData() {
           placeholder="Roll"
           keyboardType="numeric"
         />
-        
+
         <Text style={styles.infoLabel}>Class:</Text>
         <View style={styles.classSelector}>
           {CLASS_OPTIONS.map(cls => (
@@ -233,7 +239,7 @@ export default function EditData() {
           ))}
         </View>
       </View>
-      
+
       <View style={styles.infoRow}>
         <Text style={styles.infoLabel}>Section:</Text>
         <View style={styles.sectionSelector}>
@@ -260,7 +266,7 @@ export default function EditData() {
   );
 
   const renderVerification = () => {
-    const missingSubjects = subjects.filter(sub => {
+    const missingSubjects = filteredSubjects.filter(sub => {
       const marks = student.formative?.[sub];
       return !marks || Object.values(marks).every(v => v === '');
     });
@@ -287,7 +293,7 @@ export default function EditData() {
           ))}
         </View>
 
-        {subjects.map((subject) => (
+        {filteredSubjects.map((subject) => (
           <View key={subject} style={styles.row}>
             <Text style={[styles.cell, styles.subjectCell]}>{subject}</Text>
             {FORMATIVE_COLUMNS.map((column) => (
@@ -325,7 +331,7 @@ export default function EditData() {
           ))}
         </View>
 
-        {subjects.map((subject) => (
+        {filteredSubjects.map((subject) => (
           <View key={subject} style={styles.row}>
             <Text style={[styles.cell, styles.subjectCell]}>{subject}</Text>
             {SUMMATIVE_COLUMNS.map((column) => (
@@ -397,13 +403,39 @@ export default function EditData() {
     </ScrollView>
   );
 
+  const renderDPLSTab = () => (
+    <ScrollView style={styles.assessmentContainer}>
+      <Text style={styles.assessmentTitle}>🎯 Development of Personality & Life Skills</Text>
+      {DPLS_FIELDS.map((field) => (
+        <View key={field} style={styles.assessmentCard}>
+          <Text style={styles.assessmentField}>{field}</Text>
+          <TextInput
+            style={styles.textAreaInput}
+            value={student.dpls?.[field]?.remark || ''}
+            onChangeText={(value) => {
+              setStudents(prev => {
+                const next = [...prev];
+                if (!next[0].dpls) next[0].dpls = {};
+                if (!next[0].dpls[field]) next[0].dpls[field] = {};
+                next[0].dpls[field].remark = value;
+                return next;
+              });
+            }}
+            placeholder="Enter remarks..."
+            multiline
+          />
+        </View>
+      ))}
+    </ScrollView>
+  );
+
   return (
     <View style={styles.container}>
       {renderStudentInfo()}
       {renderVerification()}
-      
+
       <View style={styles.tabBar}>
-        {['formative', 'summative', 'lpcd', 'bco'].map((t) => (
+        {['formative', 'summative', 'lpcd', 'bco', 'dpls'].map((t) => (
           <TouchableOpacity key={t} onPress={() => setTab(t)} style={[styles.tab, tab === t && styles.activeTab]}>
             <Text style={[styles.tabText, tab === t && styles.activeTabText]}>{t.toUpperCase()}</Text>
           </TouchableOpacity>
@@ -412,8 +444,8 @@ export default function EditData() {
 
       <ScrollView contentContainerStyle={styles.scrollContent}>
         {imageUri && imageUri !== 'undefined' && (
-          <TouchableOpacity 
-            style={styles.previewCard} 
+          <TouchableOpacity
+            style={styles.previewCard}
             onPress={() => setImagePreviewVisible(true)}
             activeOpacity={0.9}
           >
@@ -427,13 +459,14 @@ export default function EditData() {
         {tab === 'summative' && renderSummativeTab()}
         {tab === 'lpcd' && renderLPCDTab()}
         {tab === 'bco' && renderBCOTab()}
+        {tab === 'dpls' && renderDPLSTab()}
       </ScrollView>
 
       <View style={styles.footer}>
         <TouchableOpacity style={styles.saveBtn} onPress={handleSave} disabled={isSaving}>
           {isSaving ? <ActivityIndicator color="#fff" /> : <Text style={styles.btnText}>💾 Save Student Data</Text>}
         </TouchableOpacity>
-        
+
         <TouchableOpacity style={styles.scanAnotherBtn} onPress={handleScanAnother}>
           <Text style={styles.btnText}>📷 Scan Another</Text>
         </TouchableOpacity>
@@ -450,15 +483,15 @@ export default function EditData() {
           <View style={styles.modalContainer}>
             <TouchableWithoutFeedback>
               <View style={styles.modalContent}>
-                <TouchableOpacity 
-                  style={styles.closeButton} 
+                <TouchableOpacity
+                  style={styles.closeButton}
                   onPress={() => setImagePreviewVisible(false)}
                 >
                   <Text style={styles.closeButtonText}>✕</Text>
                 </TouchableOpacity>
-                <Image 
-                  source={{ uri: imageUri }} 
-                  style={styles.fullScreenImage} 
+                <Image
+                  source={{ uri: imageUri }}
+                  style={styles.fullScreenImage}
                   resizeMode="contain"
                 />
                 <Text style={styles.modalHint}>Tap anywhere to close</Text>
@@ -498,12 +531,12 @@ const styles = StyleSheet.create({
   tabText: { fontSize: 12, color: '#666' },
   activeTabText: { color: '#1a73e8', fontWeight: 'bold' },
   scrollContent: { paddingBottom: 100 },
-  previewCard: { 
-    margin: 12, 
-    padding: 12, 
-    borderRadius: 12, 
-    backgroundColor: '#fff', 
-    borderWidth: 1, 
+  previewCard: {
+    margin: 12,
+    padding: 12,
+    borderRadius: 12,
+    backgroundColor: '#fff',
+    borderWidth: 1,
     borderColor: '#e0e0e0',
     alignItems: 'center',
   },
@@ -528,23 +561,23 @@ const styles = StyleSheet.create({
   phaseLabel: { fontSize: 12, color: '#666', marginBottom: 5 },
   gradeInput: { borderWidth: 1, borderColor: '#ddd', borderRadius: 6, padding: 8, textAlign: 'center' },
   textAreaInput: { borderWidth: 1, borderColor: '#ddd', borderRadius: 6, padding: 8, minHeight: 60, textAlignVertical: 'top' },
-  footer: { 
-    position: 'absolute', 
-    bottom: 0, 
-    width: '100%', 
-    padding: 15, 
-    backgroundColor: '#fff', 
-    borderTopWidth: 1, 
+  footer: {
+    position: 'absolute',
+    bottom: 0,
+    width: '100%',
+    padding: 15,
+    backgroundColor: '#fff',
+    borderTopWidth: 1,
     borderTopColor: '#eee',
     flexDirection: 'row',
     gap: 10,
   },
-  saveBtn: { 
+  saveBtn: {
     flex: 1,
-    backgroundColor: '#1a73e8', 
-    padding: 15, 
-    borderRadius: 8, 
-    alignItems: 'center' 
+    backgroundColor: '#1a73e8',
+    padding: 15,
+    borderRadius: 8,
+    alignItems: 'center'
   },
   scanAnotherBtn: {
     flex: 1,
@@ -554,7 +587,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   btnText: { color: '#fff', fontWeight: 'bold', fontSize: 16 },
-  
+
   modalContainer: {
     flex: 1,
     backgroundColor: 'rgba(0, 0, 0, 0.95)',
