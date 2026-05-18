@@ -8,26 +8,42 @@ export const SUMMATIVE_COLUMNS = ['SE1', 'SE2', 'SE3'];
 export const CLASS_OPTIONS = ['I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII', 'IX', 'X'];
 
 export const LPCD_FIELDS = [
-  'Pattern of intelligence', 'Area of interest', 'Positive attitude',
-  'Exceptional ability', 'Features of anxiety', 'Learning gaps',
-  'Specific learning difficulties'
+  'Patterns of Intelligence',
+  'Area of Interest',
+  'Positive Attitude',
+  'Exceptional Ability',
+  'Features of Anxiety',
+  'Learning Gaps',
+  'Specific Learning Difficulties'
 ];
 
 export const BCO_FIELDS = [
-  'Self awareness', 'Communication skill', 'Collaborative thinking',
-  'Experiential learning skill', 'Critical thinking',
-  'Computational / Analytical thinking', 'Problem solving ability',
-  'Decision making skills', 'Creative presentation skill', 'Aesthetic appreciation'
+  'Self Awareness',
+  'Communication Skill',
+  'Collaborative Thinking',
+  'Experiential Learning',
+  'Critical Thinking',
+  'Analytical Thinking',
+  'Problem Solving',
+  'Decision Making',
+  'Creative Presentation',
+  'Aesthetic Appreciation'
 ];
 
 export const DPLS_FIELDS = [
-  'Listening Skill', 'Communication', 'Empathy Skill', 'Co-operation Skill',
-  'Conversation Skill', 'Friendship Skill', 'Conflict Resolution',
-  'Stress Coping Skill', 'Decision Making', 'Leadership'
+  'Listening Skill',
+  'Communication',
+  'Empathy',
+  'Cooperation',
+  'Conversation',
+  'Friendship',
+  'Conflict Resolution',
+  'Stress Management',
+  'Decision Making',
+  'Leadership'
 ];
 
-// ============= API KEY MANAGEMENT (5 Keys) =============
-// ============= API KEY MANAGEMENT (Paid API - Single Key) =============
+// ============= API KEY MANAGEMENT =============
 const API_KEY = process.env.EXPO_PUBLIC_GEMINI_API_KEY;
 
 function getNextApiKey() {
@@ -38,6 +54,7 @@ function getNextApiKey() {
   console.log("🔑 Using Paid API Key");
   return API_KEY;
 }
+
 function cleanClassName(className) {
   if (!className) return '';
   const romanMap = {
@@ -58,7 +75,7 @@ function cleanRollNumber(roll) {
 
 // ============= CREATE EMPTY STUDENT =============
 export function createEmptyStudent() {
-  const subjects = ['1st Language', '2nd Language', 'Mathematics', 'Our Environment', 'Art & Work Education', 'Health & Physical Education'];
+  const subjects = ['1st Language', '2nd Language', 'Mathematics', 'Our Environmental', 'Art & Work Education', 'Health & Physical Education'];
   const marks = {};
   subjects.forEach(s => {
     marks[s] = {};
@@ -66,10 +83,10 @@ export function createEmptyStudent() {
   });
 
   const lpcd = {};
-  LPCD_FIELDS.forEach(f => lpcd[f] = { formative1: '', formative2: '', formative3: '' });
+  LPCD_FIELDS.forEach(f => lpcd[f] = { phase1: '', phase2: '', phase3: '' });
 
   const bco = {};
-  BCO_FIELDS.forEach(f => bco[f] = { formative1: '', formative2: '', formative3: '' });
+  BCO_FIELDS.forEach(f => bco[f] = { phase1: '', phase2: '', phase3: '' });
 
   const dpls = {};
   DPLS_FIELDS.forEach(f => dpls[f] = { remark: '' });
@@ -90,21 +107,42 @@ export function createEmptyStudent() {
 
 // ============= CONVERT TO EDIT DATA FORMAT =============
 export function toEditDataStudent(student) {
-  const subjects = student.subjects || ['1st Language', '2nd Language', 'Mathematics', 'Our Environment', 'Art & Work Education', 'Health & Physical Education'];
+  const allSubjects = ['1st Language', '2nd Language', 'Mathematics', 'Our Environmental', 'Art & Work Education', 'Health & Physical Education'];
+  
+  // Subject mapping for API response (Our Environment -> Our Environmental)
+  const subjectMapping = {
+    'Our Environment': 'Our Environmental',
+    'Our Environmental': 'Our Environmental'
+  };
+  
   const formative = {};
   const summative = {};
 
-  subjects.forEach((subject) => {
+  allSubjects.forEach((subject) => {
     formative[subject] = {};
     summative[subject] = {};
-    const sm = student.marks?.[subject] || {};
+    
+    // Check if subject exists in student.marks with mapping
+    let marksData = {};
+    for (const [key, value] of Object.entries(student.marks || {})) {
+      const mappedKey = subjectMapping[key] || key;
+      if (mappedKey === subject) {
+        marksData = value;
+        break;
+      }
+    }
+    
+    // Also check direct match
+    if (Object.keys(marksData).length === 0 && student.marks?.[subject]) {
+      marksData = student.marks[subject];
+    }
 
     FORMATIVE_COLUMNS.forEach((col) => {
-      const val = sm[col];
+      const val = marksData[col];
       formative[subject][col] = (val === null || val === undefined) ? '' : String(val);
     });
     SUMMATIVE_COLUMNS.forEach((col) => {
-      const val = sm[col];
+      const val = marksData[col];
       summative[subject][col] = (val === null || val === undefined) ? '' : String(val);
     });
   });
@@ -113,9 +151,9 @@ export function toEditDataStudent(student) {
   LPCD_FIELDS.forEach(field => {
     const raw = student.lpcd?.[field] || {};
     lpcd[field] = {
-      formative1: raw.formative1 || raw.F1 || '',
-      formative2: raw.formative2 || raw.F2 || '',
-      formative3: raw.formative3 || raw.F3 || ''
+      phase1: raw.phase1 || raw.formative1 || '',
+      phase2: raw.phase2 || raw.formative2 || '',
+      phase3: raw.phase3 || raw.formative3 || ''
     };
   });
 
@@ -123,9 +161,9 @@ export function toEditDataStudent(student) {
   BCO_FIELDS.forEach(field => {
     const raw = student.bco?.[field] || {};
     bco[field] = {
-      formative1: raw.formative1 || raw.F1 || '',
-      formative2: raw.formative2 || raw.F2 || '',
-      formative3: raw.formative3 || raw.F3 || ''
+      phase1: raw.phase1 || raw.formative1 || '',
+      phase2: raw.phase2 || raw.formative2 || '',
+      phase3: raw.phase3 || raw.formative3 || ''
     };
   });
 
@@ -146,7 +184,7 @@ export function toEditDataStudent(student) {
     lpcd,
     bco,
     dpls,
-    subjects
+    subjects: allSubjects
   };
 }
 
@@ -189,40 +227,65 @@ export async function parseStudentFromImage(imageUri, base64Image = null) {
     const MODEL_NAME = "gemini-2.5-flash";
     const URL = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL_NAME}:generateContent?key=${API_KEY}`;
 
-    // Improved prompt with explicit instructions
-    const prompt = `You are an OCR system for Banglar Shiksha report cards. Extract data from this image.
+    const prompt = `You are an OCR system. Extract ALL data from this Holistic Progress Report Card.
 
-**CRITICAL RULES:**
-1. Class MUST be Roman numeral: I, II, III, IV, V (NOT 1,2,3,4,5)
-2. Roll number: 2-digit format (01, 02, 15 - NOT 1,2,15)
-3. ALL 6 subjects must have marks extracted
-4. "Health & Physical Education" marks are IMPORTANT - do not skip
-5. SE1 marks are summative evaluation marks
+Return ONLY valid JSON with this exact structure:
 
-**Return ONLY this JSON format (no markdown, no explanation):**
 {
-  "name": "full name from card",
-  "class": "I or II or III or IV or V",
-  "roll": "01 or 02 or 15",
-  "section": "A or B or C or D",
+  "name": "student full name",
+  "class": "I/II/III/IV/V",
+  "roll": "01",
+  "section": "A/B/C/D",
   "marks": {
-    "1st Language": {"F1A":"", "F1B":"", "F1C":"", "F2A":"", "F2B":"", "F2C":"", "F3A":"", "F3B":"", "F3C":"", "SE1":"", "SE2":"", "SE3":""},
-    "2nd Language": {"F1A":"", "F1B":"", "F1C":"", "F2A":"", "F2B":"", "F2C":"", "F3A":"", "F3B":"", "F3C":"", "SE1":"", "SE2":"", "SE3":""},
-    "Mathematics": {"F1A":"", "F1B":"", "F1C":"", "F2A":"", "F2B":"", "F2C":"", "F3A":"", "F3B":"", "F3C":"", "SE1":"", "SE2":"", "SE3":""},
-    "Our Environment": {"F1A":"", "F1B":"", "F1C":"", "F2A":"", "F2B":"", "F2C":"", "F3A":"", "F3B":"", "F3C":"", "SE1":"", "SE2":"", "SE3":""},
-    "Art & Work Education": {"F1A":"", "F1B":"", "F1C":"", "F2A":"", "F2B":"", "F2C":"", "F3A":"", "F3B":"", "F3C":"", "SE1":"", "SE2":"", "SE3":""},
-    "Health & Physical Education": {"F1A":"", "F1B":"", "F1C":"", "F2A":"", "F2B":"", "F2C":"", "F3A":"", "F3B":"", "F3C":"", "SE1":"", "SE2":"", "SE3":""}
+    "1st Language": {"F1A": "", "F1B": "", "F1C": "", "SE1": ""},
+    "2nd Language": {"F1A": "", "F1B": "", "F1C": "", "SE1": ""},
+    "Mathematics": {"F1A": "", "F1B": "", "F1C": "", "SE1": ""},
+    "Our Environmental": {"F1A": "", "F1B": "", "F1C": "", "SE1": ""},
+    "Art & Work Education": {"F1A": "", "F1B": "", "F1C": "", "SE1": ""},
+    "Health & Physical Education": {"F1A": "", "F1B": "", "F1C": "", "SE1": ""}
   },
-  "lpcd": {},
-  "bco": {},
-  "dpls": {}
+  "lpcd": {
+    "Patterns of Intelligence": {"phase1": "", "phase2": "", "phase3": ""},
+    "Area of Interest": {"phase1": "", "phase2": "", "phase3": ""},
+    "Positive Attitude": {"phase1": "", "phase2": "", "phase3": ""},
+    "Exceptional Ability": {"phase1": "", "phase2": "", "phase3": ""},
+    "Features of Anxiety": {"phase1": "", "phase2": "", "phase3": ""},
+    "Learning Gaps": {"phase1": "", "phase2": "", "phase3": ""},
+    "Specific Learning Difficulties": {"phase1": "", "phase2": "", "phase3": ""}
+  },
+  "bco": {
+    "Self Awareness": {"phase1": "", "phase2": "", "phase3": ""},
+    "Communication Skill": {"phase1": "", "phase2": "", "phase3": ""},
+    "Collaborative Thinking": {"phase1": "", "phase2": "", "phase3": ""},
+    "Experiential Learning": {"phase1": "", "phase2": "", "phase3": ""},
+    "Critical Thinking": {"phase1": "", "phase2": "", "phase3": ""},
+    "Analytical Thinking": {"phase1": "", "phase2": "", "phase3": ""},
+    "Problem Solving": {"phase1": "", "phase2": "", "phase3": ""},
+    "Decision Making": {"phase1": "", "phase2": "", "phase3": ""},
+    "Creative Presentation": {"phase1": "", "phase2": "", "phase3": ""},
+    "Aesthetic Appreciation": {"phase1": "", "phase2": "", "phase3": ""}
+  },
+  "dpls": {
+    "Listening Skill": {"remark": ""},
+    "Communication": {"remark": ""},
+    "Empathy": {"remark": ""},
+    "Cooperation": {"remark": ""},
+    "Conversation": {"remark": ""},
+    "Friendship": {"remark": ""},
+    "Conflict Resolution": {"remark": ""},
+    "Stress Management": {"remark": ""},
+    "Decision Making": {"remark": ""},
+    "Leadership": {"remark": ""}
+  }
 }
 
-**REMEMBER:** 
-- Class: convert "1" to "I", "2" to "II", "3" to "III", "4" to "IV", "5" to "V"
-- If "Our Environmental" appears, rename to "Our Environment"
-- Extract ALL visible marks, especially SE1 for all subjects
-- Return ONLY valid JSON`;
+EXTRACTION RULES:
+1. LPCD fields: Extract short keywords or grades (Good, Average, Poor OR A/B/C/D)
+2. BCO fields: Extract grades (A, B, C, D)
+3. DPLS fields: Extract teacher remarks
+4. If a field has no data, use empty string ""
+5. Subject name is "Our Environmental" (not "Our Environment")
+6. Return ONLY valid JSON, no markdown`;
 
     let response = await fetch(URL, {
       method: 'POST',
@@ -268,28 +331,51 @@ export async function parseStudentFromImage(imageUri, base64Image = null) {
         console.log("✅ JSON Parsed Successfully");
         console.log("📚 Class:", extractedData.class);
         console.log("📝 Name:", extractedData.name);
+        console.log("📊 Subjects found:", Object.keys(extractedData.marks || {}));
+        console.log("📊 LPCD fields found:", Object.keys(extractedData.lpcd || {}));
+        console.log("📊 BCO fields found:", Object.keys(extractedData.bco || {}));
+        console.log("📊 DPLS fields found:", Object.keys(extractedData.dpls || {}));
       }
     } catch (parseError) {
       console.log("❌ JSON Parse Error:", parseError.message);
       extractedData = {};
     }
 
-    // Fix "Our Environment" spelling
-    if (extractedData.marks) {
-      if (extractedData.marks["Our Environmental"] && !extractedData.marks["Our Environment"]) {
-        extractedData.marks["Our Environment"] = extractedData.marks["Our Environmental"];
-        delete extractedData.marks["Our Environmental"];
-      }
-    }
-
     const defaultStudent = createEmptyStudent();
 
-    // Ensure class is properly formatted
     let finalClass = extractedData.class || '';
     if (finalClass && !finalClass.match(/^[IVXLCDM]+$/i)) {
       const classMap = { '1': 'I', '2': 'II', '3': 'III', '4': 'IV', '5': 'V' };
       finalClass = classMap[finalClass] || finalClass;
     }
+
+    // Merge marks data with subject mapping
+    const mergedMarks = { ...defaultStudent.marks };
+    if (extractedData.marks) {
+      Object.keys(extractedData.marks).forEach(subject => {
+        let mappedSubject = subject;
+        if (subject === 'Our Environment') mappedSubject = 'Our Environmental';
+        if (mergedMarks[mappedSubject]) {
+          mergedMarks[mappedSubject] = { ...mergedMarks[mappedSubject], ...extractedData.marks[subject] };
+        } else {
+          mergedMarks[mappedSubject] = extractedData.marks[subject];
+        }
+      });
+    }
+
+    // Merge LPCD data
+    const mergedLPCD = { ...defaultStudent.lpcd, ...(extractedData.lpcd || {}) };
+    
+    // Merge BCO data
+    const mergedBCO = { ...defaultStudent.bco, ...(extractedData.bco || {}) };
+    
+    // Merge DPLS data
+    const mergedDPLS = { ...defaultStudent.dpls, ...(extractedData.dpls || {}) };
+
+    console.log("🔴 FINAL MARKS - Subjects:", Object.keys(mergedMarks));
+    console.log("🔴 FINAL LPCD - Fields:", Object.keys(mergedLPCD));
+    console.log("🔴 FINAL BCO - Fields:", Object.keys(mergedBCO));
+    console.log("🔴 FINAL DPLS - Fields:", Object.keys(mergedDPLS));
 
     return {
       ...defaultStudent,
@@ -297,10 +383,10 @@ export async function parseStudentFromImage(imageUri, base64Image = null) {
       class: cleanClassName(finalClass),
       roll: cleanRollNumber(extractedData.roll || ''),
       section: extractedData.section || '',
-      marks: { ...defaultStudent.marks, ...(extractedData.marks || {}) },
-      lpcd: extractedData.lpcd || {},
-      bco: extractedData.bco || {},
-      dpls: extractedData.dpls || {},
+      marks: mergedMarks,
+      lpcd: mergedLPCD,
+      bco: mergedBCO,
+      dpls: mergedDPLS,
     };
 
   } catch (error) {

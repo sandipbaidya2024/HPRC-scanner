@@ -91,8 +91,6 @@ export const deleteStudent = async (id) => {
   }
 };
 
-// ৫. নির্দিষ্ট ক্লাসের স্টুডেন্ট খোঁজা
-// ৫. নির্দিষ্ট ক্লাসের স্টুডেন্ট খোঁজা
 export const getStudentsByClass = async (className) => {
   try {
     const allStudents = await getStudents();
@@ -158,6 +156,105 @@ export const setAppVersion = async (version) => {
     await AsyncStorage.setItem(STORAGE_KEYS.APP_VERSION, version);
     return true;
   } catch (error) {
+    return false;
+  }
+};
+
+// ==================== DATA MIGRATION FUNCTIONS ====================
+
+// চেক করুন পুরানো ডাটা ফরম্যাটে আছে কিনা
+export const needsMigration = async () => {
+  try {
+    const allStudents = await getStudents();
+    if (allStudents.length === 0) return false;
+    
+    // প্রথম স্টুডেন্ট চেক করুন
+    const firstStudent = allStudents[0];
+    
+    // পুরানো ফরম্যাটে marks আছে কিন্তু formative নেই?
+    if (firstStudent.marks && !firstStudent.formative) {
+      return true;
+    }
+    return false;
+  } catch (error) {
+    return false;
+  }
+};
+
+// ডাটা মাইগ্রেট করুন
+export const migrateStudentData = async () => {
+  try {
+    const allStudents = await getStudents();
+    if (allStudents.length === 0) return true;
+    
+    let migratedCount = 0;
+    
+    const migratedStudents = allStudents.map(student => {
+      // যদি ইতিমধ্যে নতুন ফরম্যাটে থাকে
+      if (student.formative && student.summative) {
+        return student;
+      }
+      
+      // পুরানো ফরম্যাট থেকে কনভার্ট
+      const oldMarks = student.marks || {};
+      const newFormative = {};
+      const newSummative = {};
+      
+      Object.keys(oldMarks).forEach(subject => {
+        newFormative[subject] = {};
+        newSummative[subject] = {};
+        
+        const marks = oldMarks[subject] || {};
+        
+        // Formative columns
+        ['F1A', 'F1B', 'F1C', 'F2A', 'F2B', 'F2C', 'F3A', 'F3B', 'F3C'].forEach(col => {
+          newFormative[subject][col] = marks[col] || '';
+        });
+        
+        // Summative columns
+        ['SE1', 'SE2', 'SE3'].forEach(col => {
+          newSummative[subject][col] = marks[col] || '';
+        });
+      });
+      
+      migratedCount++;
+      
+      return {
+        ...student,
+        formative: newFormative,
+        summative: newSummative,
+        // পুরানো marks রেখে দিচ্ছি ব্যাকআপ হিসেবে
+        oldMarksBackup: student.marks,
+        migratedAt: new Date().toISOString()
+      };
+    });
+    
+    await AsyncStorage.setItem(STORAGE_KEYS.STUDENTS_LIST, JSON.stringify(migratedStudents));
+    console.log(`✅ Migrated ${migratedCount} students to new format`);
+    return true;
+  } catch (error) {
+    console.error('Migration failed:', error);
+    return false;
+  }
+};
+
+// ভার্সন আপডেটের সময় মাইগ্রেশন চেক করুন
+export const handleVersionUpdate = async (oldVersion, newVersion) => {
+  try {
+    // ডাটা মাইগ্রেশন দরকার কিনা চেক করুন
+    const needsMigrate = await needsMigration();
+    
+    if (needsMigrate) {
+      console.log('🔄 Migrating student data to new format...');
+      await migrateStudentData();
+    }
+    
+    // নতুন ভার্সন সেভ করুন
+    await setAppVersion(newVersion);
+    console.log(`✅ Version updated from ${oldVersion} to ${newVersion}`);
+    return true;
+  } catch (error) {
+    console.error('Version update failed:', error);
     return false;
   }
 };
