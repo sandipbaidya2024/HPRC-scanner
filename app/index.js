@@ -19,12 +19,11 @@ const { width } = Dimensions.get('window');
 const CURRENT_VERSION = '1.0.1';  // নতুন ভার্সন নাম দিন
 
 const NEW_FEATURES = [
-  { icon: '📄', title: 'Holistic Report Card Scanner', description: 'Scan 4 pages at once. Complete student data extraction!' },
-  { icon: '🤖', title: 'AI-Powered OCR', description: 'Gemini AI for accurate handwritten text recognition.' },
-  { icon: '🌐', title: 'SMS Portal Auto-Fill', description: 'Live sync with Banglar Shiksha portal.' },
-  { icon: '📊', title: 'Enhanced Reports', description: 'Generate LPCD, BCO reports in PDF format.' },
+  '📄 Holistic Report Card Scanner - Scan 4 pages at once',
+  '🤖 AI-Powered OCR - Gemini AI for accurate handwritten text recognition',
+  '🌐 SMS Portal Auto-Fill - Live sync with Banglar Shiksha portal',
+  '📊 Enhanced Reports - Generate LPCD, BCO reports in PDF format',
 ];
-
 export default function HomeScreen() {
   const router = useRouter();
   const { isDark } = useTheme();
@@ -156,15 +155,12 @@ const checkProfileAndVersion = async () => {
             <View style={styles.forceUpdateDivider} />
 
             <Text style={styles.forceUpdateSubtitle}>What's New:</Text>
-            {updateInfo?.features?.map((feature, index) => (
-              <View key={index} style={styles.forceUpdateFeatureItem}>
-                <Text style={styles.forceUpdateFeatureBullet}>•</Text>
-                <Text style={styles.forceUpdateFeatureText}>{feature}</Text>
-                <Text style={styles.forceUpdateInfo}>
-                  ✅ Your existing student data will be preserved during update.
-                </Text>
-              </View>
-            ))}
+           {updateInfo?.features?.map((feature, index) => (
+  <View key={index} style={styles.forceUpdateFeatureItem}>
+    <Text style={styles.forceUpdateFeatureBullet}>•</Text>
+    <Text style={styles.forceUpdateFeatureText}>{feature}</Text>
+  </View>
+))}
 
             <View style={styles.forceUpdateDivider} />
 
