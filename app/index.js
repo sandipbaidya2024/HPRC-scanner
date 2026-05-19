@@ -10,7 +10,7 @@ import ThemeToggle from '../components/ThemeToggle';
 import UpdateNotification from '../components/UpdateNotification';
 import { getColors } from '../constants/colors';
 import { useTheme } from '../context/ThemeContext';
-import { getAppVersion, getProfile, getStudents, setAppVersion } from '../utils/database';
+import { getAppVersion, getProfile, getStudents, handleVersionUpdate, setAppVersion } from '../utils/database';
 import { createEmptyStudent, parseStudentFromImage, toEditDataStudent } from '../utils/reportCard';
 
 
@@ -25,7 +25,7 @@ const NEW_FEATURES = [
   { icon: '📊', title: 'Enhanced Reports', description: 'Generate LPCD, BCO reports in PDF format.' },
 ];
 
-export default function HomeScreen() { 
+export default function HomeScreen() {
   const router = useRouter();
   const { isDark } = useTheme();
   const colors = getColors(isDark);
@@ -35,45 +35,61 @@ export default function HomeScreen() {
   const [isProcessing, setIsProcessing] = useState(false);
   const [showUpdateModal, setShowUpdateModal] = useState(false);
   const [forceUpdateModal, setForceUpdateModal] = useState(false);  // 👈 এই লাইন যোগ করুন
-  const [updateInfo, setUpdateInfo] = useState(null);               
+  const [updateInfo, setUpdateInfo] = useState(null);
   useEffect(() => {
     checkProfileAndVersion();
   }, []);
 
- const checkProfileAndVersion = async () => {
-  const savedProfile = await getProfile();
-  if (!savedProfile) {
-    router.replace('/profileSetup');
-    return;
-  }
-  setProfile(savedProfile);
-  loadStats();
-  
-  const savedVersion = await getAppVersion();
-  
-  // সবাইকে আপডেট দেখান (শুধু রিলিজের সময়)
-  // 7 দিন পরে comment করে দেবেন
-  const FORCE_SHOW_UPDATE = true;  // রিলিজের সময় true, পরে false
-  
-  if (FORCE_SHOW_UPDATE || (savedVersion && savedVersion !== CURRENT_VERSION)) {
-    setUpdateInfo({
-      version: CURRENT_VERSION,
-      features: NEW_FEATURES
-    });
-    setForceUpdateModal(true);
-  }
-  
-  // ভার্সন সেট করুন
-  if (!savedVersion || savedVersion !== CURRENT_VERSION) {
-    await setAppVersion(CURRENT_VERSION);
+const checkProfileAndVersion = async () => {
+  try {
+    const savedProfile = await getProfile();
+    if (!savedProfile) {
+      router.replace('/profileSetup');
+      return;
+    }
+    setProfile(savedProfile);
+    
+    const savedVersion = await getAppVersion();
+    
+    // 🔥 ডাটা মাইগ্রেশন সবচেয়ে আগে করুন
+    if (savedVersion && savedVersion !== CURRENT_VERSION) {
+      console.log(`Updating from version ${savedVersion} to ${CURRENT_VERSION}`);
+      const success = await handleVersionUpdate(savedVersion, CURRENT_VERSION);
+      if (!success) {
+        Alert.alert('Update Error', 'Failed to migrate data. Please contact support.');
+        return;
+      }
+    }
+    
+    if (!savedVersion || savedVersion !== CURRENT_VERSION) {
+      await setAppVersion(CURRENT_VERSION);
+    }
+    
+    // ✅ await যোগ করুন
+    await loadStats();
+    
+    const FORCE_SHOW_UPDATE = true;
+    if (FORCE_SHOW_UPDATE || (savedVersion && savedVersion !== CURRENT_VERSION)) {
+      setTimeout(() => {
+        setUpdateInfo({
+          version: CURRENT_VERSION,
+          features: NEW_FEATURES
+        });
+        setForceUpdateModal(true);
+      }, 1000); // 1 সেকেন্ড delay
+    }
+    
+  } catch (error) {
+    console.error('Check profile error:', error);
+    Alert.alert('Error', 'Failed to load app. Please reinstall or contact support.');
   }
 };
 
-const handleForceUpdate = async () => {
-  setForceUpdateModal(false);
-  const playStoreUrl = 'https://play.google.com/store/apps/details?id=com.sandip2025.bsassistant';
-  Linking.openURL(playStoreUrl);
-};
+  const handleForceUpdate = async () => {
+    setForceUpdateModal(false);
+    const playStoreUrl = 'https://play.google.com/store/apps/details?id=com.sandip2025.bsassistant';
+    Linking.openURL(playStoreUrl);
+  };
   const loadStats = async () => {
     const allStudents = await getStudents();
     const uniqueClasses = new Set(allStudents.map(s => s.class)).size;
@@ -81,43 +97,43 @@ const handleForceUpdate = async () => {
   };
 
 
-const processScannedImage = async (imageUri, base64Data) => {
-  console.log("📸 Processing scanned image...");
-  setIsProcessing(true);
-  try {
-    const parsedStudent = await parseStudentFromImage(imageUri, base64Data);
+  const processScannedImage = async (imageUri, base64Data) => {
+    console.log("📸 Processing scanned image...");
+    setIsProcessing(true);
+    try {
+      const parsedStudent = await parseStudentFromImage(imageUri, base64Data);
 
-    console.log("✅ Parsed Student:", JSON.stringify(parsedStudent, null, 2));
-     
-    console.log("🟡 PARSED STUDENT from OCR:");
-    console.log("  - LPCD:", parsedStudent.lpcd);
-    console.log("  - BCO:", parsedStudent.bco);
-    console.log("  - DPLS:", parsedStudent.dpls);
-    const nextStudent = toEditDataStudent(parsedStudent);
-    console.log("🟢 AFTER toEditDataStudent:");
-    console.log("  - LPCD:", nextStudent.lpcd);
-    console.log("  - BCO:", nextStudent.bco);
-    console.log("  - DPLS:", nextStudent.dpls);
-    setIsProcessing(false);
-    router.push({ 
-      pathname: '/editData', 
-      params: { 
-        imageUri: imageUri, 
-        data: JSON.stringify([nextStudent]) 
-      } 
-    });
-  } catch (error) {
-    setIsProcessing(false);
-    Alert.alert('Error', 'Failed to extract data from image: ' + error.message);
-    router.push({ 
-      pathname: '/editData', 
-      params: { 
-        imageUri: imageUri, 
-        data: JSON.stringify([toEditDataStudent(createEmptyStudent())]) 
-      } 
-    });
-  }
-};
+      console.log("✅ Parsed Student:", JSON.stringify(parsedStudent, null, 2));
+
+      console.log("🟡 PARSED STUDENT from OCR:");
+      console.log("  - LPCD:", parsedStudent.lpcd);
+      console.log("  - BCO:", parsedStudent.bco);
+      console.log("  - DPLS:", parsedStudent.dpls);
+      const nextStudent = toEditDataStudent(parsedStudent);
+      console.log("🟢 AFTER toEditDataStudent:");
+      console.log("  - LPCD:", nextStudent.lpcd);
+      console.log("  - BCO:", nextStudent.bco);
+      console.log("  - DPLS:", nextStudent.dpls);
+      setIsProcessing(false);
+      router.push({
+        pathname: '/editData',
+        params: {
+          imageUri: imageUri,
+          data: JSON.stringify([nextStudent])
+        }
+      });
+    } catch (error) {
+      setIsProcessing(false);
+      Alert.alert('Error', 'Failed to extract data from image: ' + error.message);
+      router.push({
+        pathname: '/editData',
+        params: {
+          imageUri: imageUri,
+          data: JSON.stringify([toEditDataStudent(createEmptyStudent())])
+        }
+      });
+    }
+  };
   const openScanDocument = () => setScannerVisible(true);
   const showComingSoon = () => Alert.alert('Coming Soon!', 'Holistic Report Card Scanner is under development.\n\nStay tuned!', [{ text: 'OK' }]);
   const handleUpdateModalClose = async () => { setShowUpdateModal(false); await setAppVersion(CURRENT_VERSION); };
@@ -127,37 +143,37 @@ const processScannedImage = async (imageUri, base64Data) => {
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       <StatusBar barStyle={isDark ? "light-content" : "dark-content"} />
       <UpdateNotification visible={showUpdateModal} onClose={handleUpdateModalClose} version={CURRENT_VERSION} features={NEW_FEATURES} />
- <Modal visible={forceUpdateModal} transparent animationType="fade" onRequestClose={() => {}}>
+      <Modal visible={forceUpdateModal} transparent animationType="fade" onRequestClose={() => { }}>
         <View style={styles.forceUpdateOverlay}>
           <View style={styles.forceUpdateContainer}>
             <View style={styles.forceUpdateIconContainer}>
               <Text style={styles.forceUpdateIcon}>🔄</Text>
             </View>
-            
+
             <Text style={styles.forceUpdateTitle}>New Update Available!</Text>
             <Text style={styles.forceUpdateVersion}>Version {updateInfo?.version}</Text>
-            
+
             <View style={styles.forceUpdateDivider} />
-            
+
             <Text style={styles.forceUpdateSubtitle}>What's New:</Text>
             {updateInfo?.features?.map((feature, index) => (
               <View key={index} style={styles.forceUpdateFeatureItem}>
                 <Text style={styles.forceUpdateFeatureBullet}>•</Text>
                 <Text style={styles.forceUpdateFeatureText}>{feature}</Text>
                 <Text style={styles.forceUpdateInfo}>
-  ✅ Your existing student data will be preserved during update.
-</Text>
+                  ✅ Your existing student data will be preserved during update.
+                </Text>
               </View>
             ))}
-            
+
             <View style={styles.forceUpdateDivider} />
-            
+
             <Text style={styles.forceUpdateWarning}>
               ⚠️ This update is required to continue using the app.
             </Text>
-            
-            <TouchableOpacity 
-              style={styles.forceUpdateButton} 
+
+            <TouchableOpacity
+              style={styles.forceUpdateButton}
               onPress={handleForceUpdate}
             >
               <Text style={styles.forceUpdateButtonText}>📥 UPDATE NOW</Text>
@@ -298,7 +314,7 @@ const processScannedImage = async (imageUri, base64Data) => {
           </LinearGradient>
         </TouchableOpacity>
 
-      
+
         {/* WhatsApp Support Button */}
         <TouchableOpacity style={styles.whatsappButton} onPress={() => Linking.openURL('https://wa.me/919876543210?text=Hello!%20I%20need%20help%20with%20Banglar%20Shiksha%20Assistant%20app')}>
           <LinearGradient colors={['#25D366', '#128C7E']} style={styles.whatsappGradient}>
@@ -352,60 +368,60 @@ const styles = StyleSheet.create({
   whatsappSubText: { color: 'rgba(255,255,255,0.8)', fontSize: 10, marginTop: 2 },
   bottomSpace: { height: 30 },
   // YouTube Button Styles
-youtubeHelpBtn: {
-  marginTop: 10,
-  marginBottom: 10,
-  borderRadius: 16,
-  overflow: 'hidden',
-  elevation: 4,
-},
-youtubeGradient: {
-  flexDirection: 'row',
-  alignItems: 'center',
-  padding: 14,
-  gap: 12,
-},
-youtubeHelpText: {
-  flex: 1,
-  color: '#fff',
-  fontSize: 15,
-  fontWeight: 'bold',
-},
-youtubeHelpSubText: {
-  color: 'rgba(255,255,255,0.8)',
-  fontSize: 10,
-  position: 'absolute',
-  bottom: 6,
-  right: 16,
-},
+  youtubeHelpBtn: {
+    marginTop: 10,
+    marginBottom: 10,
+    borderRadius: 16,
+    overflow: 'hidden',
+    elevation: 4,
+  },
+  youtubeGradient: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 14,
+    gap: 12,
+  },
+  youtubeHelpText: {
+    flex: 1,
+    color: '#fff',
+    fontSize: 15,
+    fontWeight: 'bold',
+  },
+  youtubeHelpSubText: {
+    color: 'rgba(255,255,255,0.8)',
+    fontSize: 10,
+    position: 'absolute',
+    bottom: 6,
+    right: 16,
+  },
 
-// WhatsApp Button Styles
-whatsappButton: {
-  marginTop: 10,
-  marginBottom: 20,
-  borderRadius: 16,
-  overflow: 'hidden',
-  elevation: 4,
-},
-whatsappGradient: {
-  flexDirection: 'row',
-  alignItems: 'center',
-  padding: 16,
-  gap: 12,
-},
-whatsappText: {
-  flex: 1,
-  color: '#fff',
-  fontSize: 16,
-  fontWeight: 'bold',
-},
-whatsappSubText: {
-  color: 'rgba(255,255,255,0.8)',
-  fontSize: 10,
-  position: 'absolute',
-  bottom: 6,
-  right: 16,
-},
+  // WhatsApp Button Styles
+  whatsappButton: {
+    marginTop: 10,
+    marginBottom: 20,
+    borderRadius: 16,
+    overflow: 'hidden',
+    elevation: 4,
+  },
+  whatsappGradient: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 16,
+    gap: 12,
+  },
+  whatsappText: {
+    flex: 1,
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  whatsappSubText: {
+    color: 'rgba(255,255,255,0.8)',
+    fontSize: 10,
+    position: 'absolute',
+    bottom: 6,
+    right: 16,
+  },
   // Force Update Modal Styles
   forceUpdateOverlay: {
     flex: 1,
@@ -497,10 +513,10 @@ whatsappSubText: {
     fontSize: 16,
   },
   forceUpdateInfo: {
-  fontSize: 12,
-  color: '#4CAF50',
-  textAlign: 'center',
-  marginVertical: 8,
-  fontWeight: '500',
-},
+    fontSize: 12,
+    color: '#4CAF50',
+    textAlign: 'center',
+    marginVertical: 8,
+    fontWeight: '500',
+  },
 });

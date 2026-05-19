@@ -195,7 +195,6 @@ export const migrateStudentData = async () => {
         return student;
       }
       
-      // পুরানো ফরম্যাট থেকে কনভার্ট
       const oldMarks = student.marks || {};
       const newFormative = {};
       const newSummative = {};
@@ -203,15 +202,11 @@ export const migrateStudentData = async () => {
       Object.keys(oldMarks).forEach(subject => {
         newFormative[subject] = {};
         newSummative[subject] = {};
-        
         const marks = oldMarks[subject] || {};
         
-        // Formative columns
         ['F1A', 'F1B', 'F1C', 'F2A', 'F2B', 'F2C', 'F3A', 'F3B', 'F3C'].forEach(col => {
           newFormative[subject][col] = marks[col] || '';
         });
-        
-        // Summative columns
         ['SE1', 'SE2', 'SE3'].forEach(col => {
           newSummative[subject][col] = marks[col] || '';
         });
@@ -219,18 +214,18 @@ export const migrateStudentData = async () => {
       
       migratedCount++;
       
+      const { marks, ...studentWithoutMarks } = student; // marks ফিল্ড বাদ দিন
+      
       return {
-        ...student,
+        ...studentWithoutMarks,
         formative: newFormative,
         summative: newSummative,
-        // পুরানো marks রেখে দিচ্ছি ব্যাকআপ হিসেবে
-        oldMarksBackup: student.marks,
         migratedAt: new Date().toISOString()
       };
     });
     
     await AsyncStorage.setItem(STORAGE_KEYS.STUDENTS_LIST, JSON.stringify(migratedStudents));
-    console.log(`✅ Migrated ${migratedCount} students to new format`);
+    console.log(`✅ Migrated ${migratedCount} students`);
     return true;
   } catch (error) {
     console.error('Migration failed:', error);

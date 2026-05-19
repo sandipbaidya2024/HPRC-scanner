@@ -795,17 +795,7 @@ const styles = StyleSheet.create({
   modalCloseText: { color: '#fff', fontSize: 24, fontWeight: 'bold' },
   fullScreenImage: { width: '100%', height: '80%' },
   modalHint: { position: 'absolute', bottom: 50, left: 0, right: 0, textAlign: 'center', color: 'rgba(255,255,255,0.6)', fontSize: 14, fontWeight: '500' },
-    modalHint: {
-    position: 'absolute',
-    bottom: 50,
-    left: 0,
-    right: 0,
-    textAlign: 'center',
-    color: 'rgba(255,255,255,0.6)',
-    fontSize: 14,
-    fontWeight: '500',
-  },
-  // 👇 নিচের কোড যোগ করুন
+
   warningOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.7)',

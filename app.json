@@ -2,7 +2,7 @@
   "expo": {
     "name": "Banglar Shiksha Assistant",
     "slug": "banglar-shiksha-assistant",
-    "version": "1.0.0",
+    "version": "1.0.1",  // 👈 1.0.1 এ পরিবর্তন করুন
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "banglarshikshaassistant",
@@ -22,7 +22,7 @@
         "foregroundImage": "./assets/images/android-icon-foreground.png"
       },
       "package": "com.sandip2025.bsassistant",
-      "versionCode": 1,
+      // "versionCode": 1,  // 👈 এই লাইনটি সরিয়ে দিন বা কমেন্ট করুন
       "permissions": [
         "android.permission.CAMERA"
       ],
